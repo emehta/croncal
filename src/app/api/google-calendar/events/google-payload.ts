@@ -1,7 +1,7 @@
 import { formatDateForTimeZone } from "@/lib/calendar-timezone";
 import { shiftDateStr } from "@/lib/date-utils";
 import { CRONCAL_PROPERTY, googleColorId } from "@/lib/google-calendar";
-import { googleDate, recurrenceForRepeat } from "@/lib/google-recurrence";
+import { DEFAULT_ZONE, googleDate, recurrenceForRepeat } from "@/lib/google-recurrence";
 import type { CalendarEvent, EventRepeat, GoogleEventChanges, GoogleEventCreate } from "@/types/calendar-event";
 
 export type GoogleAttendee = {
@@ -28,7 +28,7 @@ function parseNameEmailToken(token: string): { displayName?: string; email?: str
 }
 
 /** What Google falls back to when an event carries no time zone of its own. */
-const DEFAULT_TIME_ZONE = "America/New_York";
+const DEFAULT_TIME_ZONE = DEFAULT_ZONE;
 
 export type GoogleEventTime = { date: string } | { dateTime: string; timeZone: string };
 

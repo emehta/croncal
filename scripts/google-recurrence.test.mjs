@@ -3,7 +3,7 @@
  *
  * What is defended is a save that does not happen and says it did. A colour,
  * a type or an importance changed on a Google event sent Google nothing and
- * closed the dialog as saved (5 Oct 2026, "Gym - Chris"). Beside it: a
+ * closed the dialog as saved (5 Oct 2026, "Gym - Coach"). Beside it: a
  * repeating Google series read as "Does not repeat", a series that could not
  * be changed as a whole, and Google's habit of throwing a series' changed
  * days away when its times change, which a save must undo.
@@ -171,9 +171,9 @@ const series = {
   summary: "Break", colorId: undefined, start: breakSeries.start, end: breakSeries.end,
   extendedProperties: { private: { anotherAppTag: "keep" } },
 };
-const renamed = { summary: "Gym - Chris", status: "confirmed", originalStartTime: pivot, start: pivot, end: { dateTime: sgt("2026-10-05", "19:00").dateTime, timeZone: SGT }, extendedProperties: { private: { anotherAppTag: "keep" } } };
+const renamed = { summary: "Gym - Coach", status: "confirmed", originalStartTime: pivot, start: pivot, end: { dateTime: sgt("2026-10-05", "19:00").dateTime, timeZone: SGT }, extendedProperties: { private: { anotherAppTag: "keep" } } };
 let plan = exceptionPlan(renamed, series, SGT);
-check("a renamed day: its name, nothing else", [plan.fields, plan.privateFields, plan.moved, plan.cancelled], [{ summary: "Gym - Chris" }, {}, null, false]);
+check("a renamed day: its name, nothing else", [plan.fields, plan.privateFields, plan.moved, plan.cancelled], [{ summary: "Gym - Coach" }, {}, null, false]);
 
 plan = exceptionPlan({ ...renamed, summary: "Break", colorId: "11", extendedProperties: { private: { anotherAppTag: "keep", croncalType: "work" } } }, series, SGT);
 check("a coloured and typed day", [plan.fields, plan.privateFields], [{ colorId: "11" }, { croncalType: "work" }]);
@@ -190,7 +190,7 @@ check("no original start, no plan", exceptionPlan({ summary: "x" }, series, SGT)
 
 const movedPlan = exceptionPlan({ ...renamed, start: sgt("2026-10-05", "20:00"), end: sgt("2026-10-05", "21:00"), colorId: "11" }, series, SGT);
 check("restored whole", restoreBody(movedPlan, { changed: new Set(), dayShift: 0, keepMove: true, seriesAllDay: false, zone: SGT }), {
-  summary: "Gym - Chris", colorId: "11", start: { dateTime: sgt("2026-10-05", "20:00").dateTime, timeZone: SGT }, end: { dateTime: sgt("2026-10-05", "21:00").dateTime, timeZone: SGT },
+  summary: "Gym - Coach", colorId: "11", start: { dateTime: sgt("2026-10-05", "20:00").dateTime, timeZone: SGT }, end: { dateTime: sgt("2026-10-05", "21:00").dateTime, timeZone: SGT },
 });
 check("a field just set on every day is not given back", Object.keys(restoreBody(movedPlan, { changed: new Set(["colorId", "timing"]), dayShift: 0, keepMove: true, seriesAllDay: false, zone: SGT })), ["summary", "start", "end"]);
 check("the move follows a shift in days", restoreBody(movedPlan, { changed: new Set(), dayShift: 1, keepMove: true, seriesAllDay: false, zone: SGT }).start.dateTime, sgt("2026-10-06", "20:00").dateTime);
@@ -202,14 +202,14 @@ check("a private field just set is not given back", restoreBody(typedPlan, { cha
 /* ─── what the form's save sends ────────────────────────────────────── */
 
 const gym = mapGoogleEvent({
-  id: "a1_20261005T100000Z", recurringEventId: "a1", summary: "Gym - Chris",
+  id: "a1_20261005T100000Z", recurringEventId: "a1", summary: "Gym - Coach",
   start: { dateTime: "2026-10-05T18:00:00+08:00", timeZone: SGT }, end: { dateTime: "2026-10-05T19:00:00+08:00", timeZone: SGT },
   organizer: { self: true },
 });
-const saved = { ...gym, title: "Gym - Chris", description: null, location: null, participants: null, conferencing: null };
+const saved = { ...gym, title: "Gym - Coach", description: null, location: null, participants: null, conferencing: null };
 check("the bug: colour, type and importance are a change", buildGoogleEventPatch({ ...saved, color: "#D50000", importance: "high", event_type: "personal" }, gym), { color: "#D50000", importance: "high", event_type: "personal" });
 check("nothing changed sends nothing", buildGoogleEventPatch({ ...saved, start_time: new Date(gym.start_time).toISOString(), end_time: new Date(gym.end_time).toISOString() }, gym), {});
-check("a stray space is not a rename", buildGoogleEventPatch({ title: "Gym - Chris" }, { ...gym, title: "Gym - Chris " }), {});
+check("a stray space is not a rename", buildGoogleEventPatch({ title: "Gym - Coach" }, { ...gym, title: "Gym - Coach " }), {});
 check("a colour in other case is the same colour", buildGoogleEventPatch({ color: "#4285f4" }, gym), {});
 check("choosing neither importance is a change", buildGoogleEventPatch({ importance: null }, { ...gym, importance: "high" }), { importance: null });
 check("a link typed", buildGoogleEventPatch({ conferencing: "https://meet.example/x" }, gym), { link: "https://meet.example/x" });

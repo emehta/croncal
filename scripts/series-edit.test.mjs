@@ -56,7 +56,7 @@ const google = { ...day, source: "google", recurrence: null, google: { seriesId:
 check("a Google day's colour", eventChanges({ ...saved, recurrence: null, color: "#D50000", google: google.google }, google), { color: "#D50000" });
 check("a Google day's repeat", eventChanges({ ...saved, recurrence: null, google: { ...google.google, repeat: "weekly" } }, google), { repeat: "weekly" });
 
-check("the fields carried to the changed days", changedRowFields({ ...saved, title: "Gym with Chris", conferencing: "https://x.test" }, day), { title: "Gym with Chris", conferencing: "https://x.test" });
+check("the fields carried to the changed days", changedRowFields({ ...saved, title: "Gym with Coach", conferencing: "https://x.test" }, day), { title: "Gym with Coach", conferencing: "https://x.test" });
 check("none carried when only the time moved", changedRowFields({ ...saved, start_time: at("2026-10-05", "10:00") }, day), {});
 
 const shownDay = { start: new Date(day.start_time), end: new Date(day.end_time) };

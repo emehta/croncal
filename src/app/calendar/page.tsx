@@ -35,6 +35,7 @@ import { fromDateStr } from "@/lib/date-utils";
 import { useUrlTarget } from "@/lib/use-url-target";
 import { getErrorMessage, isAbortError } from "@/lib/error-utils";
 import { authedFetch } from "@/lib/authed-fetch";
+import { GOOGLE_CHANGED_EVENT } from "@/lib/open-settings";
 import type { GoogleStatusPayload } from "@/app/api/auth/google/status/route";
 import { rememberConnection, rememberedConnection } from "@/lib/connection-memory";
 import { CALENDAR_COLUMN_GAP, UNDER_DOCK_MARGIN } from "@/lib/styles";
@@ -480,7 +481,11 @@ function CalendarPageInner() {
         }
       }
     }
-    checkGoogle();
+    void checkGoogle();
+    // Settings connects and disconnects without leaving the page.
+    const recheck = () => { void checkGoogle(); };
+    window.addEventListener(GOOGLE_CHANGED_EVENT, recheck);
+    return () => window.removeEventListener(GOOGLE_CHANGED_EVENT, recheck);
   }, []);
 
   // ─── Fetch events ────────────────────────────────────────────────

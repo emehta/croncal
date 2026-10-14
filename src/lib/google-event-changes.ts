@@ -4,6 +4,7 @@
  */
 
 import type { CalendarEvent, GoogleEventChanges, GoogleEventCreate } from "@/types/calendar-event";
+import { DEFAULT_ZONE } from "@/lib/google-recurrence";
 
 function sameText(a: string | null | undefined, b: string | null | undefined): boolean {
   return (a ?? "").trim() === (b ?? "").trim();
@@ -66,7 +67,7 @@ export function buildGoogleEventPatch(
     if (resolvedStart !== undefined) patch.start_time = resolvedStart;
     if (resolvedEnd !== undefined) patch.end_time = resolvedEnd;
     patch.all_day = allDay;
-    patch.timezone = current.timezone ?? base.timezone ?? "America/New_York";
+    patch.timezone = current.timezone ?? base.timezone ?? DEFAULT_ZONE;
   }
 
   return patch;

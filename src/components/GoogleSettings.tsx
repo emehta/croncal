@@ -8,6 +8,7 @@ import { DialogButton } from "@/components/form/Dialog";
 import { TextField } from "@/components/form/fields";
 import { authedFetch } from "@/lib/authed-fetch";
 import { getErrorMessage } from "@/lib/error-utils";
+import { announceGoogleChange } from "@/lib/open-settings";
 import type { GoogleStatusPayload } from "@/app/api/auth/google/status/route";
 
 /**
@@ -87,7 +88,9 @@ export default function GoogleSettings() {
 
   const disconnect = () =>
     act(async () => {
-      await readJson("/api/auth/google/disconnect", { method: "POST" });
+      // A JSON body, as the guard in front of every write requires (src/proxy.ts).
+      await readJson("/api/auth/google/disconnect", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      announceGoogleChange();
       await load();
     });
 

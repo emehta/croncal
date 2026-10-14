@@ -1,6 +1,7 @@
 import type { CalendarEvent } from "@/types/calendar-event";
 import { getTimeZoneParts, makeUtcDateFromParts, zonedDateTimeToUtc } from "@/lib/calendar-timezone";
 import { DAY_NAMES, MONTH_NAMES, ordinal } from "@/lib/date-utils";
+import { DEFAULT_ZONE } from "@/lib/google-recurrence";
 
 type RecurrenceOccurrence = { start: Date; end: Date };
 
@@ -36,7 +37,7 @@ export function expandRecurrences(
   const eventStart = new Date(event.start_time);
   const eventEnd = new Date(event.end_time);
   const durationMs = eventEnd.getTime() - eventStart.getTime();
-  const timeZone = event.timezone || "America/New_York";
+  const timeZone = event.timezone || DEFAULT_ZONE;
   const recurrenceUntilMs = event.recurrence_until ? new Date(event.recurrence_until).getTime() : null;
   const exceptionStartTimes = new Set(
     (event.recurrence_exceptions ?? []).map((value) => new Date(value).getTime()),

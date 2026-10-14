@@ -43,7 +43,7 @@ function getFormatter(timeZone: string): Intl.DateTimeFormat {
 }
 
 export function getBrowserTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 /** A timestamp that names its own offset ("Z", "+08:00", "-0500"). */

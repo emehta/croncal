@@ -16,6 +16,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "e2e:google": "node scripts/google-e2e.mjs",
+    "google:stand-in": "node scripts/google-stand-in.mjs",
     "maint:extract": "node tools/extract.mjs",
     "maint:check-private": "node tools/check-private.mjs",
     "maint:trim-css": "node tools/trim-css.mjs"

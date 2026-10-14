@@ -55,7 +55,7 @@ check("UTC itself", googleEventTiming(allDay("2026-02-28", "2026-02-28", "UTC"))
 // Timed events pass through with their zone.
 check("timed event", googleEventTiming({ start_time: "2026-09-26T01:00:00.000Z", end_time: "2026-09-26T02:00:00.000Z", all_day: false, timezone: "Asia/Singapore" }),
   { start: { dateTime: "2026-09-26T01:00:00.000Z", timeZone: "Asia/Singapore" }, end: { dateTime: "2026-09-26T02:00:00.000Z", timeZone: "Asia/Singapore" } });
-check("timed event with no zone takes the default", googleEventTiming({ start_time: "2026-09-26T01:00:00.000Z", end_time: "2026-09-26T02:00:00.000Z", all_day: false }).start.timeZone, "America/New_York");
+check("timed event with no zone takes UTC, never a city's", googleEventTiming({ start_time: "2026-09-26T01:00:00.000Z", end_time: "2026-09-26T02:00:00.000Z", all_day: false }).start.timeZone, "UTC");
 
 // Anything unusable is refused rather than sent as NaN dates.
 check("missing start", googleEventTiming({ end_time: "2026-09-26T02:00:00.000Z", all_day: false }), null);
@@ -78,8 +78,8 @@ check("no attendees", buildGoogleCreateAttendees(""), undefined);
  */
 
 // The owner's real case, 5 Oct 2026: 17:15 to 17:58 in Singapore, Basil, Personal, Medium.
-const vidhi = {
-  title: "Meet Vidhi",
+const meeting = {
+  title: "Meet the team",
   description: "Poolside",
   location: null,
   participants: null,
@@ -93,66 +93,66 @@ const vidhi = {
   link: null,
   repeat: "none",
 };
-check("everything the form holds goes to Google", googleCreateBody(vidhi), {
-  summary: "Meet Vidhi",
+check("everything the form holds goes to Google", googleCreateBody(meeting), {
+  summary: "Meet the team",
   start: { dateTime: "2026-10-05T09:15:00.000Z", timeZone: "Asia/Singapore" },
   end: { dateTime: "2026-10-05T09:58:00.000Z", timeZone: "Asia/Singapore" },
   description: "Poolside",
   colorId: "10",
   extendedProperties: { private: { croncalImportance: "medium", croncalType: "personal" } },
 });
-check("…with no rule for an event that does not repeat", "recurrence" in googleCreateBody(vidhi), false);
+check("…with no rule for an event that does not repeat", "recurrence" in googleCreateBody(meeting), false);
 
 check("a weekly event repeats on its own weekday, from its first day",
-  googleCreateBody({ ...vidhi, repeat: "weekly" }).recurrence, ["RRULE:FREQ=WEEKLY;BYDAY=MO"]);
+  googleCreateBody({ ...meeting, repeat: "weekly" }).recurrence, ["RRULE:FREQ=WEEKLY;BYDAY=MO"]);
 check("…its weekday where the event is, not where the server is: 07:30 Tuesday in Singapore is Monday in UTC",
-  googleCreateBody({ ...vidhi, start_time: "2026-10-05T23:30:00.000Z", end_time: "2026-10-06T00:30:00.000Z", repeat: "weekly" }).recurrence,
+  googleCreateBody({ ...meeting, start_time: "2026-10-05T23:30:00.000Z", end_time: "2026-10-06T00:30:00.000Z", repeat: "weekly" }).recurrence,
   ["RRULE:FREQ=WEEKLY;BYDAY=TU"]);
-check("every weekday", googleCreateBody({ ...vidhi, repeat: "weekdays" }).recurrence, ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"]);
-check("every two weeks", googleCreateBody({ ...vidhi, repeat: "biweekly" }).recurrence, ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO"]);
-check("every day", googleCreateBody({ ...vidhi, repeat: "daily" }).recurrence, ["RRULE:FREQ=DAILY"]);
+check("every weekday", googleCreateBody({ ...meeting, repeat: "weekdays" }).recurrence, ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"]);
+check("every two weeks", googleCreateBody({ ...meeting, repeat: "biweekly" }).recurrence, ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO"]);
+check("every day", googleCreateBody({ ...meeting, repeat: "daily" }).recurrence, ["RRULE:FREQ=DAILY"]);
 
-const allDayCreate = googleCreateBody({ ...vidhi, ...allDay("2026-10-05", "2026-10-06", "Asia/Singapore"), repeat: "yearly" });
+const allDayCreate = googleCreateBody({ ...meeting, ...allDay("2026-10-05", "2026-10-06", "Asia/Singapore"), repeat: "yearly" });
 check("an all-day event is its own two days, end exclusive", [allDayCreate.start, allDayCreate.end],
   [{ date: "2026-10-05" }, { date: "2026-10-07" }]);
 check("…and repeats from its own first day", allDayCreate.recurrence, ["RRULE:FREQ=YEARLY"]);
 
 check("the link goes in the private properties, trimmed",
-  googleCreateBody({ ...vidhi, importance: null, event_type: null, link: "  https://meet.example/abc  " }).extendedProperties,
+  googleCreateBody({ ...meeting, importance: null, event_type: null, link: "  https://meet.example/abc  " }).extendedProperties,
   { private: { croncalLink: "https://meet.example/abc" } });
 check("nothing set means no private properties at all",
-  "extendedProperties" in googleCreateBody({ ...vidhi, importance: null, event_type: null }), false);
-const sparse = googleCreateBody({ ...vidhi, description: "   ", location: "", color: "#4a9f6e" });
+  "extendedProperties" in googleCreateBody({ ...meeting, importance: null, event_type: null }), false);
+const sparse = googleCreateBody({ ...meeting, description: "   ", location: "", color: "#4a9f6e" });
 check("an empty description or location is left out, and a colour Google lacks is not sent",
   ["description" in sparse, "location" in sparse, "colorId" in sparse], [false, false, false]);
 check("a location and attendees go as Google spells them",
-  (({ location, attendees }) => ({ location, attendees }))(googleCreateBody({ ...vidhi, location: " Pool deck ", participants: "Vidhi <vidhi@example.com>" })),
-  { location: "Pool deck", attendees: [{ displayName: "Vidhi", email: "vidhi@example.com" }] });
-check("a blank title is still an event", googleCreateBody({ ...vidhi, title: "  " }).summary, "(No title)");
-check("unusable times are refused", googleCreateBody({ ...vidhi, end_time: "2026-10-05T09:00:00.000Z" }), null);
+  (({ location, attendees }) => ({ location, attendees }))(googleCreateBody({ ...meeting, location: " Pool deck ", participants: "Sam <sam@example.com>" })),
+  { location: "Pool deck", attendees: [{ displayName: "Sam", email: "sam@example.com" }] });
+check("a blank title is still an event", googleCreateBody({ ...meeting, title: "  " }).summary, "(No title)");
+check("unusable times are refused", googleCreateBody({ ...meeting, end_time: "2026-10-05T09:00:00.000Z" }), null);
 
 /* The request body, checked rather than trusted. */
-const request = { ...vidhi, repeat: "weekly", link: "https://x.example" };
+const request = { ...meeting, repeat: "weekly", link: "https://x.example" };
 const sortedKeys = (object) => Object.fromEntries(Object.entries(object).sort(([a], [b]) => a.localeCompare(b)));
 check("a request from the form reads back as itself", sortedKeys(readGoogleEventCreate(request)), sortedKeys(request));
-check("absent optional fields read as empty", readGoogleEventCreate({ title: "A", start_time: vidhi.start_time, end_time: vidhi.end_time, all_day: false }),
-  { title: "A", start_time: vidhi.start_time, end_time: vidhi.end_time, all_day: false, timezone: "America/New_York",
+check("absent optional fields read as empty", readGoogleEventCreate({ title: "A", start_time: meeting.start_time, end_time: meeting.end_time, all_day: false }),
+  { title: "A", start_time: meeting.start_time, end_time: meeting.end_time, all_day: false, timezone: "UTC",
     description: undefined, location: undefined, participants: undefined, link: undefined, color: undefined,
     importance: null, event_type: null, repeat: "none" });
-check("no title is refused", typeof readGoogleEventCreate({ ...vidhi, title: undefined }), "string");
-check("times that are not strings are refused", typeof readGoogleEventCreate({ ...vidhi, start_time: 1 }), "string");
-check("a repeat the form does not offer is refused", typeof readGoogleEventCreate({ ...vidhi, repeat: "hourly" }), "string");
-check("an importance outside the three is refused", typeof readGoogleEventCreate({ ...vidhi, importance: "urgent" }), "string");
-check("a type outside the five is refused", typeof readGoogleEventCreate({ ...vidhi, event_type: "party" }), "string");
+check("no title is refused", typeof readGoogleEventCreate({ ...meeting, title: undefined }), "string");
+check("times that are not strings are refused", typeof readGoogleEventCreate({ ...meeting, start_time: 1 }), "string");
+check("a repeat the form does not offer is refused", typeof readGoogleEventCreate({ ...meeting, repeat: "hourly" }), "string");
+check("an importance outside the three is refused", typeof readGoogleEventCreate({ ...meeting, importance: "urgent" }), "string");
+check("a type outside the five is refused", typeof readGoogleEventCreate({ ...meeting, event_type: "party" }), "string");
 
 /* What the form saves, mapped to that shape. */
 const saved = {
-  title: "Gym", description: null, start_time: vidhi.start_time, end_time: vidhi.end_time, all_day: false,
+  title: "Gym", description: null, start_time: meeting.start_time, end_time: meeting.end_time, all_day: false,
   timezone: "Asia/Singapore", recurrence: "weekdays", participants: null, conferencing: "https://zoom.example/1",
   meeting_notes: "not for Google", location: null, color: "#33B679", importance: "high", event_type: "work", sync_to_google: true,
 };
 check("the form's Link and repeat become Google's link and rule", googleCreateFields(saved), {
-  title: "Gym", description: null, location: null, participants: null, start_time: vidhi.start_time, end_time: vidhi.end_time,
+  title: "Gym", description: null, location: null, participants: null, start_time: meeting.start_time, end_time: meeting.end_time,
   all_day: false, timezone: "Asia/Singapore", color: "#33B679", importance: "high", event_type: "work",
   link: "https://zoom.example/1", repeat: "weekdays",
 });
@@ -171,29 +171,29 @@ function stubGoogle(answers) {
 }
 
 {
-  const google = stubGoogle([[200, { id: "PLACEHOLDER", summary: "Meet Vidhi" }]]);
-  const created = await createGoogleEvent(google.context, googleCreateBody(vidhi));
+  const google = stubGoogle([[200, { id: "PLACEHOLDER", summary: "Meet the team" }]]);
+  const created = await createGoogleEvent(google.context, googleCreateBody(meeting));
   const sent = google.calls[0];
   check("the event is posted once, to the primary calendar", [google.calls.length, sent.method, sent.url],
     [1, "POST", "https://www.googleapis.com/calendar/v3/calendars/primary/events"]);
   check("…with an id of CronCal's own, in characters Google accepts", /^[0-9a-v]{32}$/.test(sent.body.id), true);
-  check("…and Google's answer is what comes back", created.summary, "Meet Vidhi");
+  check("…and Google's answer is what comes back", created.summary, "Meet the team");
 }
 
 {
   // Google fails after making the event; the retry finds it rather than making a second.
-  const google = stubGoogle([[503, { error: { errors: [{ reason: "backendError" }] } }], [409, { error: { code: 409 } }], [200, { id: "x", summary: "Meet Vidhi" }]]);
-  const created = await createGoogleEvent(google.context, googleCreateBody(vidhi));
+  const google = stubGoogle([[503, { error: { errors: [{ reason: "backendError" }] } }], [409, { error: { code: 409 } }], [200, { id: "x", summary: "Meet the team" }]]);
+  const created = await createGoogleEvent(google.context, googleCreateBody(meeting));
   check("a retry after a 503 posts the same id again", google.calls[0].body.id === google.calls[1].body.id, true);
   check("…and a 409 for it reads the event that was made, instead of adding another",
     [google.calls.map((c) => c.method), google.calls[2].url.endsWith(`/${google.calls[0].body.id}`), created.summary],
-    [["POST", "POST", "GET"], true, "Meet Vidhi"]);
+    [["POST", "POST", "GET"], true, "Meet the team"]);
 }
 
 async function refusal(status, reason) {
   const google = stubGoogle([[status, { error: { errors: [{ reason }] } }]]);
   try {
-    await createGoogleEvent(google.context, googleCreateBody(vidhi));
+    await createGoogleEvent(google.context, googleCreateBody(meeting));
     return "no error";
   } catch (error) {
     return [error.status, error.message];

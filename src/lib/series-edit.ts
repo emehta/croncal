@@ -12,6 +12,7 @@
 import type { CalendarEvent, GoogleEventChanges, RecurrenceEditScope } from "@/types/calendar-event";
 import { buildGoogleEventPatch } from "@/lib/google-event-changes";
 import {
+  DEFAULT_ZONE,
   type GoogleTiming,
   googleTimeMs,
   rebaseSeriesTiming,
@@ -120,7 +121,7 @@ export function planSeriesMove(
   next: Timing,
   overrides: readonly CalendarEvent[],
 ): SeriesMovePlan {
-  const zone = series.timezone || "America/New_York";
+  const zone = series.timezone || DEFAULT_ZONE;
   const newZone = next.timezone || zone;
   const from = toGoogle({ start_time: day.start.toISOString(), end_time: day.end.toISOString(), all_day: series.all_day, timezone: zone });
   const { timing, dayShift } = rebaseSeriesTiming({ slot: toGoogle({ ...series, timezone: zone }).start, from, to: toGoogle({ ...next, timezone: newZone }), zone });

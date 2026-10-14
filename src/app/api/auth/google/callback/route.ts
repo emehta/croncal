@@ -4,6 +4,7 @@ import { upsertGoogleAuth } from "@/lib/google-auth";
 import { getGoogleRedirectUri } from "@/lib/api-route-utils";
 import { readAppConfig } from "@/selfhost/config";
 import { cookieSecret, ownerById, readGoogleClient, type GoogleClient } from "@/selfhost/google-client";
+import { googleEndpoints } from "@/lib/google-endpoints";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ function redirectTo(request: NextRequest, path: string, cookiesToClear: readonly
 }
 
 async function exchangeGoogleCode(request: NextRequest, code: string, client: GoogleClient) {
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+  const tokenRes = await fetch(googleEndpoints().token, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -91,7 +92,7 @@ async function exchangeGoogleCode(request: NextRequest, code: string, client: Go
 }
 
 async function fetchGoogleEmail(accessToken: string) {
-  const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+  const userInfoRes = await fetch(googleEndpoints().userInfo, {
     headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
   });

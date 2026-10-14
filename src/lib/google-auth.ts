@@ -1,5 +1,6 @@
 import { getAdminClient } from "@/lib/supabase-admin";
 import { ownerById, readGoogleClient } from "@/selfhost/google-client";
+import { googleEndpoints } from "@/lib/google-endpoints";
 
 /* What CronCal asks Google for: the events of the user's calendars, nothing else.
    A grant of the whole calendar (an older connection) does as well. */
@@ -72,7 +73,7 @@ export async function getGoogleCalendarScopeStatus(
   accessToken: string
 ): Promise<"granted" | "missing" | "unknown"> {
   try {
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`, {
+    const response = await fetch(`${googleEndpoints().tokenInfo}?access_token=${encodeURIComponent(accessToken)}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
     });
@@ -145,19 +146,21 @@ export async function getGoogleAccessTokenState(
     };
   }
 
+  /* No client to refresh with (it was removed in Settings): only adding one
+     and connecting again fixes that, so it is a reconnect, not a passing failure. */
   const client = await readGoogleClient(await ownerById(userId));
   if (!client) {
     return {
-      status: "temporary_failure",
-      accessToken: auth.access_token || null,
+      status: "reconnect_required",
+      accessToken: null,
       tokenExpiry: auth.token_expiry,
-      reason: "missing_google_oauth_config",
+      reason: "missing_google_client",
     };
   }
 
   // Token expired or expiring soon — refresh it
   try {
-    const res = await fetch("https://oauth2.googleapis.com/token", {
+    const res = await fetch(googleEndpoints().token, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -242,7 +245,7 @@ export async function revokeGoogleAuth(userId: string): Promise<void> {
   const token = auth?.refresh_token || auth?.access_token;
   if (token) {
     try {
-      await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+      await fetch(`${googleEndpoints().revoke}?token=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),

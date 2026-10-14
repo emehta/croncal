@@ -1,5 +1,7 @@
 import type { CalendarEvent } from "@/types/calendar-event";
 import { toDateStr } from "@/lib/date-utils";
+import { googleEndpoints } from "@/lib/google-endpoints";
+import { DEFAULT_ZONE } from "@/lib/google-recurrence";
 
 /**
  * Reading events out of Google Calendar.
@@ -102,7 +104,8 @@ function isScopeError(errorText: string): boolean {
 type GoogleEventItem = Record<string, unknown>;
 
 /** One Google event as the rest of the app expects to receive it. */
-export function mapGoogleEvent(item: GoogleEventItem): CalendarEvent {
+/** One Google event as the calendar shows it. `calendarZone` is the calendar's own, for an event that names none. */
+export function mapGoogleEvent(item: GoogleEventItem, calendarZone?: string): CalendarEvent {
   const startObj = (item.start ?? {}) as Record<string, string>;
   const endObj = (item.end ?? {}) as Record<string, string>;
   const isAllDay = Boolean(startObj.date);
@@ -158,7 +161,7 @@ export function mapGoogleEvent(item: GoogleEventItem): CalendarEvent {
     start_time: startTime,
     end_time: endTime,
     all_day: isAllDay,
-    timezone: startObj.timeZone || "America/New_York",
+    timezone: startObj.timeZone || calendarZone || DEFAULT_ZONE,
     recurrence: null,
     participants,
     conferencing,
@@ -196,6 +199,7 @@ export async function fetchGoogleCalendarEvents(
   const doFetch = options.fetchImpl ?? fetch;
 
   const items: GoogleEventItem[] = [];
+  let calendarZone: string | undefined;
   let pageToken: string | undefined;
   let pages = 0;
 
@@ -210,7 +214,7 @@ export async function fetchGoogleCalendarEvents(
     if (pageToken) params.set("pageToken", pageToken);
 
     const response = await doFetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+      `${googleEndpoints().events}?${params.toString()}`,
       { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(GOOGLE_PAGE_TIMEOUT_MS) },
     );
 
@@ -225,8 +229,9 @@ export async function fetchGoogleCalendarEvents(
       throw new GoogleCalendarError(reconnect ? "scope" : "upstream", errorText);
     }
 
-    const page = await response.json() as { items?: GoogleEventItem[]; nextPageToken?: string };
+    const page = await response.json() as { items?: GoogleEventItem[]; nextPageToken?: string; timeZone?: string };
     if (page.items) items.push(...page.items);
+    if (page.timeZone) calendarZone = page.timeZone;
     pageToken = page.nextPageToken;
     pages += 1;
   } while (pageToken && pages < MAX_PAGES);
@@ -237,5 +242,5 @@ export async function fetchGoogleCalendarEvents(
     );
   }
 
-  return items.map(mapGoogleEvent);
+  return items.map((item) => mapGoogleEvent(item, calendarZone));
 }

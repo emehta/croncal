@@ -6,6 +6,7 @@ import { AuthAccessError } from "@/lib/owner";
 import { cookieSecret, readGoogleClient } from "@/selfhost/google-client";
 import { requireOwner } from "@/selfhost/owner";
 import { SetupError } from "@/selfhost/server";
+import { googleEndpoints } from "@/lib/google-endpoints";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
       include_granted_scopes: "true",
       state,
     });
-    const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    const url = `${googleEndpoints().authorize}?${params.toString()}`;
     const response = request.nextUrl.searchParams.get("format") === "json" ? NextResponse.json({ url }) : NextResponse.redirect(url);
 
     const cookie = { httpOnly: true, sameSite: "lax" as const, secure: request.nextUrl.protocol === "https:", path: "/", maxAge: 60 * 10 };

@@ -52,8 +52,12 @@ const DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const WEEKDAY_CODES = ["MO", "TU", "WE", "TH", "FR"];
 
-/** What Google assumes for an event that names no zone. */
-export const DEFAULT_ZONE = "America/New_York";
+/**
+ * The zone for an event that names none: UTC, never a city's. Every event
+ * CronCal writes names its zone, and a Google event that names none takes
+ * its calendar's (mapGoogleEvent), so this is the last resort.
+ */
+export const DEFAULT_ZONE = "UTC";
 
 /* ─── times ──────────────────────────────────────────────────────────── */
 

@@ -37,8 +37,8 @@ import {
   slotAfterShift,
   timingAtSlot,
 } from "@/lib/google-recurrence";
+import { googleEndpoints } from "@/lib/google-endpoints";
 
-const EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 /** A failure with the words and status the route should answer with. */
 export class GoogleEditError extends Error {
@@ -101,7 +101,7 @@ async function call(
 ): Promise<CallResult> {
   const doFetch = context.fetchImpl ?? fetch;
   for (let attempt = 0; ; attempt++) {
-    const response = await doFetch(`${EVENTS_URL}${path}`, {
+    const response = await doFetch(`${googleEndpoints().events}${path}`, {
       method,
       headers: { Authorization: `Bearer ${context.accessToken}`, "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
