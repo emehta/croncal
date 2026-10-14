@@ -2,6 +2,8 @@
 
 A calendar with repeats, drag to move and two-way Google Calendar sync. It runs on your computer, and your events live in your own free Supabase project. Nothing goes to anyone else's server, except Google's if you connect it.
 
+![CronCal's week view](docs/screenshot.png)
+
 - **Day, week and month**, with the week centred on today so the days around it are always in view.
 - **Drag** an event to another time or day, and drag across empty time to make one.
 - **Repeats** every day, weekday, week, two weeks, month or year. Change one day, that day and the ones after it, or all of them.
