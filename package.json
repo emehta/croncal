@@ -1,0 +1,43 @@
+{
+  "name": "croncal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A calendar with repeats, drag to move and two-way Google Calendar sync, on your own database.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node scripts/start.mjs --port 3102",
+    "develop": "node scripts/dev.mjs",
+    "build": "next build",
+    "package": "node scripts/package.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "maint:extract": "node tools/extract.mjs",
+    "maint:check-private": "node tools/check-private.mjs",
+    "maint:trim-css": "node tools/trim-css.mjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
+    "@supabase/supabase-js": "2.117.0",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "24.13.6",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "next": "16.3.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.3.6"
+  },
+  "overrides": {
+    "eslint-plugin-react-hooks": "7.0.1"
+  }
+}

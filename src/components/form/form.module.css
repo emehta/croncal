@@ -1,0 +1,487 @@
+/*
+ * The one look for every card that adds, edits or shows a thing: events,
+ * tasks, goals, habits, dreams and scripts.
+ *
+ * Here, in a module that ships with the components, rather than in
+ * globals.css: Vercel has served new components against a globals.css chunk
+ * built before the commit (CLAUDE.md, Known Pitfalls), and a field that
+ * arrived without its border would be the "just a line" this replaced.
+ */
+
+/* ─── Fields ─────────────────────────────────────────────────────────────── */
+
+/*
+ * A text field is a box: the surface, a border at the field weight, square
+ * corners. The title fields were a bare underline and the descriptions had no
+ * edge at all, so the owner could not tell where to type.
+ *
+ * Focus firms the border to the theme's own ink. It was a 2px ring in the
+ * accent (.ui-field in globals.css), which in Midnight is green, and every
+ * native picker drew it the moment it opened.
+ */
+.field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-field-border);
+  border-radius: var(--ui-radius-md);
+  color: var(--c-text-1);
+  font-size: var(--ui-type-body-sm);
+  text-align: left;
+  transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+}
+
+.field:hover {
+  border-color: color-mix(in srgb, var(--c-text-3) 45%, var(--c-field-border));
+}
+
+.field:focus-within,
+.field[aria-expanded="true"] {
+  border-color: var(--c-text-3);
+}
+
+.field[data-invalid="true"] {
+  border-color: var(--c-danger);
+}
+
+.field :is(input, textarea) {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--c-text-1);
+  font: inherit;
+  line-height: 1.5;
+}
+
+/*
+ * A long description scrolls down inside its box and never sideways. A word
+ * too long for the line breaks rather than running off the edge, and the
+ * scrollbar's room is kept from the start, so the text does not rewrap the
+ * moment it fills the box.
+ */
+.field textarea {
+  align-self: stretch;
+  resize: none;
+  line-height: 1.6;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
+
+.field :is(input, textarea)::placeholder {
+  color: var(--c-text-4);
+}
+
+/* The box is the indicator, so the control inside draws nothing of its own. */
+.field :is(input, textarea):is(:focus, :focus-visible) {
+  outline: none;
+}
+
+.field > svg {
+  flex-shrink: 0;
+  color: var(--c-text-3);
+}
+
+/* A field that grows into the card: the description on every edit card. */
+.fieldGrow {
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+
+.fieldGrow textarea {
+  height: 100%;
+  min-height: 100px;
+}
+
+/* The title field, a size up from the rest. */
+.fieldTitle {
+  min-height: 46px;
+  font-size: var(--ui-type-subtitle);
+  font-weight: 500;
+}
+
+/* A field that opens a picker: a button drawn as the same box. */
+.trigger {
+  cursor: pointer;
+}
+
+.trigger:focus-visible {
+  outline: none;
+  border-color: var(--c-text-2);
+}
+
+.trigger:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.triggerValue {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placeholder {
+  color: var(--c-text-4);
+}
+
+.caret {
+  flex-shrink: 0;
+  color: var(--c-text-4);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.trigger[aria-expanded="true"] .caret {
+  transform: rotate(180deg);
+}
+
+/* ─── Menus: a dropdown's options, the time list ─────────────────────────── */
+
+.menu {
+  padding: 4px;
+  background: var(--page-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--ui-radius-lg);
+  box-shadow: var(--shadow-pop);
+  overscroll-behavior: contain;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--c-text-2);
+  font-size: var(--ui-type-body-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.option:is(:hover, :focus-visible) {
+  background: var(--c-hover);
+  color: var(--c-text-1);
+  outline: none;
+}
+
+.option[aria-selected="true"] {
+  background: var(--c-selected-bg);
+  color: var(--c-text-1);
+  font-weight: 600;
+}
+
+.optionCheck {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--c-text-2);
+}
+
+/* ─── The month calendar ─────────────────────────────────────────────────── */
+
+.calendar {
+  width: 280px;
+  padding: 12px;
+}
+
+.navButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--c-text-3);
+  cursor: pointer;
+}
+
+.navButton:is(:hover, :focus-visible) {
+  background: var(--c-hover);
+  color: var(--c-text-1);
+}
+
+.day {
+  height: 34px;
+  border: none;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--c-text-1);
+  font-size: var(--ui-type-label);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out);
+}
+
+.day:is(:hover, :focus-visible) {
+  background: var(--c-hover);
+}
+
+.dayOutside {
+  color: var(--c-text-4);
+}
+
+.dayToday {
+  box-shadow: inset 0 0 0 1px var(--c-border);
+  font-weight: 600;
+}
+
+.day[aria-pressed="true"] {
+  background: var(--c-accent-strong);
+  color: var(--c-on-accent);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+
+/*
+ * One size and one set of looks for every card's buttons. The cards had a
+ * pill-shaped Edit, a transparent Delete that the owner could not tell was a
+ * button, Save on the left of one card and the right of the next, and five
+ * different heights between them.
+ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-md);
+  font-size: var(--ui-type-body-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), filter var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.button[aria-busy="true"] {
+  cursor: wait;
+}
+
+.primary {
+  background: var(--c-accent-strong);
+  color: var(--c-on-accent);
+}
+
+.primary:not(:disabled):is(:hover, :focus-visible) {
+  filter: brightness(1.08);
+}
+
+.secondary {
+  background: var(--c-surface);
+  border-color: var(--c-border);
+  color: var(--c-text-1);
+}
+
+.secondary:not(:disabled):is(:hover, :focus-visible) {
+  background: var(--c-hover);
+}
+
+.danger {
+  background: var(--c-danger-wash);
+  border-color: var(--c-danger-line);
+  color: var(--c-danger);
+}
+
+.danger:not(:disabled):is(:hover, :focus-visible) {
+  border-color: var(--c-danger);
+}
+
+/* Armed: the solid fill and its own ink, set per theme by DangerFill.module.css
+   (DialogButton adds its class), never --c-on-accent over --c-danger, which
+   was 3.3:1 on Midnight. */
+.danger[data-armed="true"] {
+  background: var(--danger-fill, #b42318);
+  border-color: var(--danger-fill, #b42318);
+  color: var(--on-danger, #ffffff);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--c-text-3);
+  font-weight: 500;
+}
+
+.ghost:not(:disabled):is(:hover, :focus-visible) {
+  background: var(--c-hover);
+  color: var(--c-text-1);
+}
+
+.iconButton {
+  width: 32px;
+  padding: 0;
+}
+
+/* A thumb's height on a phone. */
+@media (max-width: 619px) {
+  .button {
+    height: 44px;
+  }
+
+  .iconButton {
+    width: 44px;
+  }
+}
+
+/* ─── The card ───────────────────────────────────────────────────────────── */
+
+/*
+ * Scrolls down only. With overflow-y alone, overflow-x quietly becomes auto
+ * too, so anything a pixel too wide gave the card a sideways scrollbar.
+ */
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+
+/* DialogCard's fadeEdges: the body fades out at an edge with more beyond it. */
+.body[data-fade="bottom"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+
+.body[data-fade="top"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 20px);
+  mask-image: linear-gradient(to bottom, transparent, #000 20px);
+}
+
+.body[data-fade="both"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 20px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 20px, #000 calc(100% - 32px), transparent);
+}
+
+/* ─── Toggle ─────────────────────────────────────────────────────────────── */
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--cal-toggle-border, var(--c-border));
+  border-radius: var(--ui-radius-round);
+  background: var(--cal-toggle-off-bg, var(--c-border));
+  cursor: pointer;
+  transition: background var(--motion-base) var(--ease-out);
+}
+
+.switch[aria-checked="true"] {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ui-radius-round);
+  background: var(--cal-toggle-knob, #fff);
+  transition: left var(--motion-base) var(--ease-out);
+}
+
+.switch[aria-checked="true"] .switchKnob {
+  left: 20px;
+}
+
+/* ─── Colour swatches ────────────────────────────────────────────────────── */
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--ui-radius-round);
+  cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: transform var(--motion-fast) var(--ease-out), outline-color var(--motion-fast) var(--ease-out);
+}
+
+.swatch:is(:hover, :focus-visible) {
+  transform: scale(1.1);
+}
+
+.swatch[aria-pressed="true"] {
+  outline-color: var(--c-text-1);
+}
+
+/* ─── Rich text (an imported event's description) ────────────────────────── */
+
+.rich {
+  color: var(--c-text-2);
+  font-size: var(--ui-type-body-sm);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.rich > * + * {
+  margin-top: 8px;
+}
+
+.rich :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--c-text-1);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.rich h1 { font-size: var(--ui-type-subtitle); }
+.rich h2 { font-size: var(--ui-type-body); }
+.rich :is(h3, h4, h5, h6) { font-size: var(--ui-type-body-sm); }
+
+.rich strong { color: var(--c-text-1); font-weight: 600; }
+
+.rich :is(ul, ol) {
+  padding-left: 20px;
+}
+
+.rich ul { list-style: disc; }
+.rich ol { list-style: decimal; }
+
+.rich li + li {
+  margin-top: 2px;
+}
+
+.rich a {
+  color: var(--c-text-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.plain {
+  color: var(--c-text-2);
+  font-size: var(--ui-type-body-sm);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

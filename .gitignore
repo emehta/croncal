@@ -1,0 +1,26 @@
+# Dependencies and builds
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local secrets and machine state
+.env*
+!.env.example
+supabase/.temp/
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Machine-local and generated from the private source
+.claude/
+extract-report.md
+
+# npm run develop's own settings (scripts/dev.mjs)
+.dev-data/
+
+# npm run package (scripts/package.mjs)
+dist/

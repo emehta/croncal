@@ -1,0 +1,51 @@
+name: Something isn't working
+description: CronCal did something it shouldn't, or didn't do something it should.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for saying. Please never paste a key here (anything starting `sb_secret_` or `GOCSPX-`): this page is public.
+        A security problem goes to the repo's **Security** tab instead, so it stays private until it is fixed.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what CronCal did instead. A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: |
+        1. Make a weekly event
+        2. Drag one of its days to tomorrow
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: CronCal version
+      description: The `version` line in package.json, in the croncal folder.
+      placeholder: "1.0.0"
+  - type: dropdown
+    id: system
+    attributes:
+      label: Computer
+      options:
+        - Mac
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: Chrome 141, Safari 26, ...
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed with
+      options:
+        - publik
+        - By hand (git clone)

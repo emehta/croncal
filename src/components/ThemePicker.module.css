@@ -1,0 +1,180 @@
+/*
+ * Settings' theme picker: one row of tiles that scrolls sideways.
+ *
+ * Every colour inside .preview is that theme's own variable, because
+ * .preview carries data-theme (see ThemePicker.tsx); its sizes are in cqw,
+ * shares of the preview's own width, so the drawing is the same at any tile
+ * size. The frame, ring, tick and name sit outside .preview and take the
+ * dialog's colours.
+ */
+
+.rail {
+  --fade: 36px;
+  --tile: 116px;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  /* Room above and below for the selection ring, which the scroller would clip. */
+  padding-block: 6px 4px;
+  margin-block: 2px 8px;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+/* A fade at whichever end has more tiles past it. */
+.rail[data-fade-start="true"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+}
+
+.rail[data-fade-end="true"] {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 var(--fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--fade));
+}
+
+.rail[data-fade-start="true"][data-fade-end="true"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+}
+
+.tile {
+  flex: 0 0 var(--tile);
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--c-text-3);
+  cursor: pointer;
+  text-align: center;
+}
+
+@media (max-width: 619px) {
+  .rail {
+    --tile: 100px;
+  }
+}
+
+.frame {
+  position: relative;
+  display: block;
+  border: 1px solid var(--c-border, rgba(255, 255, 255, 0.1));
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition:
+    outline-color var(--motion-base, 150ms) var(--ease-out, ease-out),
+    border-color var(--motion-base, 150ms) var(--ease-out, ease-out);
+}
+
+@media (hover: hover) {
+  .tile:hover .frame {
+    border-color: var(--c-field-border, rgba(255, 255, 255, 0.34));
+  }
+}
+
+.tile[aria-pressed="true"] .frame {
+  border-color: transparent;
+  outline-color: var(--c-accent, #2fa97f);
+}
+
+.badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ui-radius-round, 9999px);
+  background: var(--c-accent-strong, #0d7d59);
+  color: var(--c-on-accent, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.name {
+  font-size: var(--ui-type-label, 12px);
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  transition: color var(--motion-base, 150ms) var(--ease-out, ease-out);
+}
+
+.tile[aria-pressed="true"] .name {
+  color: var(--c-text-1);
+  font-weight: 650;
+}
+
+/* ─── The miniature: the page, one card, a title, four colours, the accent ─── */
+
+.preview {
+  container-type: inline-size;
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--page-bg);
+}
+
+.card {
+  position: absolute;
+  top: 15cqw;
+  left: 13cqw;
+  right: -4cqw;
+  bottom: -4cqw;
+  display: flex;
+  flex-direction: column;
+  gap: 5cqw;
+  padding: 11cqw 0 0 11cqw;
+  background: var(--c-card-bg);
+  border: 1px solid var(--dashboard-card-border);
+}
+
+.title {
+  width: 44cqw;
+  height: 4.4cqw;
+  border-radius: 2cqw;
+  background: var(--c-text-1);
+}
+
+.line {
+  width: 28cqw;
+  height: 3.2cqw;
+  border-radius: 2cqw;
+  background: var(--c-text-3);
+  opacity: 0.75;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 6cqw;
+  margin-top: 4cqw;
+}
+
+.chips {
+  display: flex;
+  gap: 3cqw;
+}
+
+.chips > span {
+  width: 9cqw;
+  height: 9cqw;
+  border-radius: 2cqw;
+}
+
+.accent {
+  width: 18cqw;
+  height: 9cqw;
+  border-radius: 1cqw;
+  background: var(--c-accent);
+}

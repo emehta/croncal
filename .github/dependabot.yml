@@ -1,0 +1,11 @@
+# Security fixes for npm packages arrive as pull requests on their own
+# (Dependabot security updates, in the repo's settings). This adds a monthly
+# look at the CI actions, which have no other way to say they are out of date.
+# npm versions are pinned exactly and moved by hand, with the checks run,
+# so they are not bumped here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

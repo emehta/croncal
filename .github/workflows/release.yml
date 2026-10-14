@@ -1,0 +1,32 @@
+name: Release download
+
+# A published GitHub release gets the download attached: dist/croncal.zip,
+# built from the release's own commit after the same checks as every push.
+# The README's install command fetches the latest one.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run package
+      - run: node scripts/smoke.mjs dist/croncal
+      - run: gh release upload "$TAG" dist/croncal.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}

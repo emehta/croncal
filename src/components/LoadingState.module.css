@@ -1,0 +1,36 @@
+.state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  color: var(--c-text-3);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 2px solid var(--c-border);
+  border-top-color: var(--c-accent);
+  border-radius: var(--ui-radius-round);
+  animation: loading-state-spin 700ms linear infinite;
+}
+
+.label {
+  font-size: var(--ui-type-body-sm);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+@keyframes loading-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

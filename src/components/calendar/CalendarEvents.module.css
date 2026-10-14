@@ -1,0 +1,42 @@
+/*
+ * An event under the cursor, on the time grid and in the month.
+ *
+ * It faded to 80% (the shared .ui-hover-opacity), which on a dark theme reads
+ * as the event going dull at the moment you reach for it. The owner asked for
+ * the other way round (29 Sep 2026): a little lighter on the three dark
+ * themes, a little darker on Light, where lightening would wash it into the
+ * page. A filter over the whole block, so the fill, the edge and the text move
+ * together and keep their contrast with each other.
+ *
+ * Here, beside the grids, rather than in globals.css, so it ships with them
+ * (CLAUDE.md, Known Pitfalls).
+ */
+.event {
+  transition: filter var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .event:hover {
+    filter: brightness(1.18);
+  }
+
+  :global([data-theme="light"]) .event:hover,
+  :global([data-theme="paper"]) .event:hover {
+    filter: brightness(0.94);
+  }
+}
+
+.event:focus-visible {
+  filter: brightness(1.18);
+}
+
+:global([data-theme="light"]) .event:focus-visible,
+:global([data-theme="paper"]) .event:focus-visible {
+  filter: brightness(0.94);
+}
+
+/* The event a drag is moving: its old place, held faintly until it lands. */
+.moving {
+  opacity: 0.35;
+  filter: none !important;
+}

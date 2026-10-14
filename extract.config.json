@@ -1,0 +1,41 @@
+{
+  "commit": "502cedf",
+  "entries": [
+    "src/app/calendar/page.tsx",
+    "src/app/globals.css",
+    "src/components/ThemePicker.tsx",
+    "src/lib/theme.ts",
+    "src/lib/first-paint.ts",
+    "src/app/api/auth/google/route.ts",
+    "src/app/api/auth/google/callback/route.ts",
+    "src/app/api/auth/google/disconnect/route.ts",
+    "src/app/api/auth/google/status/route.ts",
+    "src/app/api/google-calendar/events/route.ts",
+    "src/app/api/google-calendar/events/create/route.ts",
+    "src/app/api/google-calendar/events/delete/route.ts",
+    "src/app/api/google-calendar/events/update/route.ts",
+    "src/app/api/google-calendar/events/series/route.ts",
+    "scripts/alias-loader.mjs",
+    "scripts/run-tests.mjs",
+    "scripts/calendar-layout.test.mjs",
+    "scripts/calendar-range.test.mjs",
+    "scripts/calendar-selection.test.mjs",
+    "scripts/event-drag.test.mjs",
+    "scripts/google-events-response.test.mjs",
+    "scripts/google-payload.test.mjs",
+    "scripts/google-recurrence.test.mjs",
+    "scripts/recurrence.test.mjs",
+    "scripts/series-edit.test.mjs",
+    "scripts/time-format.test.mjs",
+    "scripts/time-input.test.mjs",
+    "scripts/touch-gestures.test.mjs",
+    "scripts/authed-fetch.test.mjs",
+    "src/components/Tooltip.tsx",
+    "src/lib/supabase-paging.ts",
+    "src/lib/page-cache.ts"
+  ],
+  "cuts": {
+    "src/lib/auth-users.ts": "The source app's PIN sign-in. CronCal's owner is the project's one account (src/selfhost/owner.ts, behind src/lib/owner.ts)."
+  },
+  "ignorePackages": []
+}

@@ -1,0 +1,90 @@
+name: Checks
+
+# Every push and pull request, on the three systems people run CronCal on:
+# the types, the lint, every test suite, and the smoke test (npm start on a
+# copy connected to nothing, as a new user's computer first runs it).
+# Node 24 everywhere, and the oldest Node CronCal accepts (package.json's
+# engines) on Linux, so that floor stays true. The release download is
+# built once and started on all three, so it stays one file for everyone.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request makes an older run moot.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: ${{ matrix.os }}, Node ${{ matrix.node }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        node: ["24"]
+        include:
+          - os: ubuntu-latest
+            node: "22.18.0"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run smoke
+
+  download:
+    name: Download, built
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: croncal
+          path: dist/croncal.zip
+          if-no-files-found: error
+
+  download-runs:
+    name: Download, on ${{ matrix.os }}
+    needs: download
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Only for scripts/smoke.mjs, which needs nothing installed.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.18.0"
+      - uses: actions/download-artifact@v8
+        with:
+          name: croncal
+          path: download
+      # Unzipped as the README tells people to: unzip on Mac and Linux, tar on Windows.
+      - if: runner.os != 'Windows'
+        run: unzip -q download/croncal.zip -d download
+      - if: runner.os == 'Windows'
+        run: tar -xf download/croncal.zip -C download
+      - run: node scripts/smoke.mjs download/croncal

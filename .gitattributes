@@ -1,0 +1,5 @@
+# One line ending everywhere, so a Windows checkout reads files as the tests
+# expect; the Windows launcher keeps Windows' own.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.png binary
