@@ -129,7 +129,7 @@ async function attempt(state, hooks, email = "me@example.com") {
 
 {
   const state = fresh();
-  check("Supabase refusing the account says so", (await attempt(state, { createUserFails: "unexpected" })).startsWith("502 Supabase did not make the account"), true);
+  check("Supabase refusing the account says so", (await attempt(state, { createUserFails: "unexpected" })).startsWith("502 Supabase didn't make the account"), true);
   check("and lets the claim go", state.app_owner.length, 0);
 }
 

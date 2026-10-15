@@ -10,8 +10,8 @@ export type WeekRange = {
   end: Date;
 };
 
-const STORAGE_KEY = "vitae_week_start";
-const PREFERENCE_EVENT = "vitae-preference";
+const STORAGE_KEY = "week-start";
+const PREFERENCE_EVENT = "preference-change";
 
 function isWeekStartPreference(value: string | null): value is WeekStartPreference {
   return value === "sunday" || value === "monday";

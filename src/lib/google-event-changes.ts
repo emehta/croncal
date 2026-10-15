@@ -19,9 +19,9 @@ function sameDateTimeValue(a: string | null | undefined, b: string | null | unde
 /**
  * What a save changes on a Google event, field by field against the event as
  * the form opened it. Only these go to Google, so a field left alone is never
- * rewritten there. Colour, importance, type and the link were not compared at
- * all, so a save that changed only those sent Google nothing, closed as if it
- * had saved, and was gone on the next load.
+ * rewritten there. Colour, importance, type and the link are compared too, or
+ * a save that changed only those would send Google nothing and close as if it
+ * had saved.
  */
 export function buildGoogleEventPatch(
   current: Partial<Omit<CalendarEvent, "id" | "created_at">>,
@@ -51,8 +51,8 @@ export function buildGoogleEventPatch(
 
   /*
    * An all-day event has no zone in Google, so a zone alone is not a move:
-   * the form reads one in this device's zone, which used to count as a
-   * change and rewrite the dates of every all-day event saved.
+   * the form reads one in this device's zone, which, counted as a change,
+   * would rewrite the dates of every all-day event saved.
    */
   const allDay = current.all_day ?? base.all_day ?? false;
   const timingChanged =

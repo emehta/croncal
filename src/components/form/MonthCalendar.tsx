@@ -33,9 +33,9 @@ const WEEKDAYS = [
 
 /**
  * A month of days to pick from, in the week order the owner set. The same
- * grid in the date field on every card and in the task date picker; it
- * replaces the browser's `<input type="date">`, whose calendar is drawn by
- * the operating system and ignores the theme.
+ * grid in every date field and date picker; it replaces the browser's
+ * `<input type="date">`, whose calendar is drawn by the operating system and
+ * ignores the theme.
  */
 export default function MonthCalendar({
   value,

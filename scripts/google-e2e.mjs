@@ -104,7 +104,7 @@ try {
   // ─── Before ───
   let status = await api("/api/auth/google/status");
   check("starts disconnected", status.json?.connected === false, JSON.stringify(status.json));
-  check("connecting with no client says to add one", (await api("/api/auth/google?connect=true&format=json")).status === 409);
+  check("connecting with no client says to add one", (await api("/api/auth/google?connect=true")).status === 409);
 
   // ─── The owner's client ───
   check("a wrong client ID is refused", (await api("/api/google/client", { method: "PUT", body: { clientId: "not-an-id", clientSecret: "x".repeat(20) } })).status === 400);
@@ -114,7 +114,7 @@ try {
   check("the redirect URI is this copy's", saved.json?.redirectUri === `${APP}/api/auth/google/callback`, saved.json?.redirectUri);
 
   // ─── Connect ───
-  const start = await api("/api/auth/google?connect=true&format=json");
+  const start = await api("/api/auth/google?connect=true");
   const consent = start.json?.url ?? "";
   check("connect sends the browser to the consent page", consent.startsWith(`http://127.0.0.1:${STAND_IN_PORT}/o/oauth2/v2/auth?`), consent);
   check("asking for the events and the email, nothing wider", new URL(consent).searchParams.get("scope") === "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email");

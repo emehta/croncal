@@ -1,21 +1,21 @@
 /**
- * Cases for recurrence expansion. No framework — `npm run test:recurrence`.
+ * Cases for recurrence expansion. No framework: `npm test -- recurrence`.
  *
  * This exists because of one bug that nothing on screen would have explained.
  * The cursor started at the event's own start time and stepped one interval at
  * a time until it reached the window being drawn, against a 1000-iteration
- * cap — so a *daily* event older than 1000 days spent the whole budget
+ * cap, so a *daily* event older than 1000 days spent the whole budget
  * travelling and returned nothing. The event did not render late or partly; it
  * was simply not on the calendar, and the only trace was a console warning
  * saying "may be truncated".
  *
  * So the cases below are mostly about reach: an old event still appears, and
  * appears in full. The rest pin the parts that were easy to break while fixing
- * that — month-end clamping, the weekend skip, DST, and the fact that an
+ * that: month-end clamping, the weekend skip, DST, and the fact that an
  * occurrence starting before the window still counts if it runs into it.
  */
 
-import { expandRecurrences } from "@/lib/recurrence";
+import { expandRecurrences, nextRepeatDays } from "@/lib/recurrence";
 
 const NY = "America/New_York";
 
@@ -69,7 +69,7 @@ check(
   5,
 );
 // 2786 days from the seed to 1 Sep 2026, which is a whole number of
-// fortnights — so the series lands on the 1st, 15th and 29th.
+// fortnights, so the series lands on the 1st, 15th and 29th.
 check(
   "biweekly event from 2019 keeps its phase across seven years",
   expand({ recurrence: "biweekly" }, "2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z").length,
@@ -133,7 +133,7 @@ check(
 
 /*
  * A monthly event seeded on the 31st. February has no 31st, so it clamps to
- * the last day — and clamping must happen from the seed each time, not from
+ * the last day, and clamping must happen from the seed each time, not from
  * wherever the previous month landed, or the series walks backwards to the
  * 28th and stays there.
  */
@@ -152,7 +152,7 @@ check(
 /*
  * US clocks go forward at 02:00 on Sunday 8 March 2026. A daily 09:00 event
  * stays at 09:00 local across it, which is a different UTC instant on either
- * side — 14:00Z on the 6th and 7th, 13:00Z from the 8th on.
+ * side: 14:00Z on the 6th and 7th, 13:00Z from the 8th on.
  */
 const dst = expand(
   { recurrence: "daily", start: "2026-03-06T14:00:00.000Z" },
@@ -175,6 +175,14 @@ check(
     .join(","),
   "14:00,14:00,14:00,14:00,14:00",
 );
+
+/* The form's "Next:" line: the days the calendar will draw, or Google's where the event goes to Google. */
+check("next days, monthly on the 31st in CronCal", nextRepeatDays("monthly", "2027-01-31", false).join(","), "2027-02-28,2027-03-31,2027-04-30");
+check("next days, monthly on the 31st in Google, which skips short months", nextRepeatDays("monthly", "2027-01-31", true).join(","), "2027-03-31,2027-05-31,2027-07-31");
+check("next days, yearly on 29 February in CronCal", nextRepeatDays("yearly", "2028-02-29", false).join(","), "2029-02-28,2030-02-28,2031-02-28");
+check("next days, yearly on 29 February in Google", nextRepeatDays("yearly", "2028-02-29", true).join(","), "2032-02-29,2036-02-29,2040-02-29");
+check("next days, every 2 weeks finds three", nextRepeatDays("biweekly", "2026-10-16", false).join(","), "2026-10-30,2026-11-13,2026-11-27");
+check("next days, weekdays from a Friday", nextRepeatDays("weekdays", "2026-10-16", true).join(","), "2026-10-19,2026-10-20,2026-10-21");
 
 if (failures.length) {
   console.error("\n" + failures.join("\n"));

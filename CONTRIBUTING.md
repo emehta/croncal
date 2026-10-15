@@ -29,7 +29,7 @@ npm run smoke
 ```
 
 - `lint` allows no warnings.
-- `npm test` runs every `scripts/*.test.mjs`. `npm test -- ramble` runs only the files whose names contain "ramble".
+- `npm test` runs every `scripts/*.test.mjs`. `npm test -- recurrence` runs only the files whose names contain "recurrence".
 - `smoke` builds and starts CronCal connected to nothing, as a new user's computer first runs it, and checks it answers, asks for setup, moves 127.0.0.1 to localhost, refuses another site's write, and sends the browser no secret.
 
 ## Tests
@@ -48,7 +48,7 @@ No test framework, on purpose: each suite is a plain Node script that exits non-
 - **Server routes.** `src/app/api/selfhost/` (connect, check the tables, make the account, reset a password), `src/app/api/auth/google/` (connect, its callback, status, disconnect), `src/app/api/google/client/` (the owner's Google client) and `src/app/api/google-calendar/events/` (reading and writing Google's events). CronCal's own events are Supabase, from the browser, under row level security.
 - **The guard.** `src/proxy.ts` sits in front of every request. See [SECURITY.md](SECURITY.md).
 - **The calendar.** `src/app/calendar/page.tsx` and `src/components/calendar/`. The rules that decide things, like a series' days (`recurrence.ts`), what a change to one day of a series does (`series-edit.ts`), where overlapping events sit (`calendar-layout.ts`) and how a dragged event lands (`event-drag.ts`), are pure modules in `src/lib/` with suites of their own.
-- **Google Calendar.** Through the owner's own Google Cloud client, saved in Settings (`src/selfhost/google-client.ts`); the tokens are in the server-only `google_auth` table (`src/lib/google-auth.ts`). Google's events are read and written on the server (`src/lib/google-calendar.ts`, `src/app/api/google-calendar/`) and merged with CronCal's for the page (`src/lib/calendar-merge.ts`). A Google series is read and written in Google's own repeat rules (`src/lib/google-recurrence.ts`).
+- **Google Calendar.** Through the owner's own Google Cloud client, saved in Settings (`src/selfhost/google-client.ts`); the tokens are in the server-only `google_auth` table (`src/lib/google-auth.ts`). Google's events are read and written on the server (`src/lib/google-calendar.ts`, `src/app/api/google-calendar/`) and drawn beside CronCal's. With **Sync to Google Calendar** on, a new event is made in Google, not CronCal: an event lives in one or the other, never both. A Google series is read and written in Google's own repeat rules (`src/lib/google-recurrence.ts`).
 
 ## Changing the database
 

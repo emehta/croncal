@@ -21,10 +21,9 @@ const CHIPS = ["#D50000", "#F6BF26", "#0B8043", "#4285F4"] as const;
  * carrying `data-theme` takes that theme's variables for everything inside
  * it, whatever the page around it is wearing, and the tile is drawn in the
  * theme's own colours rather than a copy of them that could drift. Nothing
- * in it may lean on a rule written as "[data-theme=x] .class" (the task
- * tints were): the page's own theme matches that too, and won wherever its
- * rule came later in the sheet, which painted the Light tile's rows black
- * under Onyx (11 Oct 2026).
+ * in it may lean on a rule written as "[data-theme=x] .class": the page's
+ * own theme matches that too, and wins wherever its rule comes later in the
+ * sheet.
  */
 function Preview({ theme }: { theme: ThemeValue }) {
   return (
@@ -54,10 +53,9 @@ function markEnds(rail: HTMLElement) {
 
 /**
  * The colour theme, in Settings: one row of tiles that scrolls sideways, its
- * ends fading where more tiles wait (the owner, 11 Oct 2026: smaller, one
- * row, a fade and a sideways scroll). The order is lib/themes': the two
+ * ends fading where more tiles wait. The order is lib/themes': the two
  * bases, their alternates, then the colours round the rainbow, with no
- * dividers (the owner's ask). `bleed` is the dialog's side padding, which
+ * dividers. `bleed` is the dialog's side padding, which
  * the row runs into so a tile scrolls out under the fade at the card's edge
  * rather than being cut at the padding.
  */

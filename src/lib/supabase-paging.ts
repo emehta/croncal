@@ -5,11 +5,6 @@
  * and it does it silently: an unbounded `.select()` over a bigger table comes
  * back with 1000 rows, no error, and no indication that there were more. Any
  * aggregate built on top of that is quietly wrong, which is worse than slow.
- *
- * Both `finance.ts` and `habits.ts` had grown their own byte-identical copy of
- * this. They had not stayed identical in the part that matters: habits ordered
- * its paged queries and finance did not — see `fetchAllRows` below for why
- * that is a correctness bug rather than a tidiness one.
  */
 
 /** The page size, and the row count at which PostgREST truncates. */
@@ -30,7 +25,7 @@ export type RangeQuery<T> = {
  * Read every row a query matches, one page at a time.
  *
  * `buildQuery` is called per page rather than taking a built query, because a
- * Supabase query builder is single-use — `.range()` on the same instance twice
+ * Supabase query builder is single-use: `.range()` on the same instance twice
  * sends the second request with both ranges applied.
  *
  * **Order the query.** LIMIT/OFFSET paging over an unordered select has no

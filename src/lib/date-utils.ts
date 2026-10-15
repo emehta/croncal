@@ -1,15 +1,11 @@
 /**
  * Shared local-date helpers.
  *
- * Every date in the app is a *local* calendar date — a habit logged on the 3rd
+ * Every date in the app is a *local* calendar date: something dated the 3rd
  * belongs to the 3rd in the user's timezone, not to a UTC instant. That rules
  * out `toISOString().split("T")[0]`, which silently shifts the day for anyone
  * west of UTC. `toDateStr` is the one correct way to turn a Date into the
- * `YYYY-MM-DD` key the database uses.
- *
- * These helpers previously lived as private copies in a dozen components
- * (`toDateStr` alone was defined six times, and the month/day name arrays
- * appeared under five different names), so this module is the single source.
+ * `YYYY-MM-DD` key the database uses. Use these rather than a private copy.
  */
 
 /** Sunday-first weekday names. Rotate with `orderWeekdays` from `week-start`. */
@@ -59,7 +55,7 @@ export const MONTHS_SHORT = [
 /**
  * Format a Date as the `YYYY-MM-DD` key used by every dated table.
  *
- * Uses the local calendar fields on purpose — see the module comment.
+ * Uses the local calendar fields on purpose: see the module comment.
  */
 export function toDateStr(date: Date): string {
   return [
@@ -109,7 +105,7 @@ export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-/** Local midnight at the start of the *next* day — an exclusive upper bound. */
+/** Local midnight at the start of the *next* day: an exclusive upper bound. */
 export function endOfDayExclusive(date: Date): Date {
   return addDays(startOfDay(date), 1);
 }
@@ -158,7 +154,7 @@ export function ordinal(value: number): string {
 
 /*
  * Arithmetic straight on the `YYYY-MM-DD` and `YYYY-MM` keys, for code that
- * reasons in calendar months — payroll, tax years — rather than in instants.
+ * reasons in calendar months rather than in instants.
  * Day counts go through Date.UTC so a daylight-saving change can never make a
  * day 23 hours long and knock a count off by one.
  */
@@ -226,7 +222,7 @@ export function weekdayOfDateStr(dateStr: string): number {
 }
 
 /**
- * The same day `months` later, clamped to the end of a shorter month — the
+ * The same day `months` later, clamped to the end of a shorter month: the
  * date-key twin of `addMonthsClamped`.
  */
 export function shiftDateStrByMonths(dateStr: string, months: number): string {
@@ -242,8 +238,7 @@ export function shiftDateStrByMonths(dateStr: string, months: number): string {
  * Written from the name arrays above rather than by toLocaleDateString,
  * which builds a new Intl formatter on every call (about 20 microseconds),
  * and these run for every cell of a month grid and every row of a list. The
- * output is en-US exactly: 64,800 dates over three years and three zones
- * checked against toLocaleDateString with each one's options on 12 Oct 2026.
+ * output is exactly toLocaleDateString's en-US with each one's options.
  */
 
 /** Weekday name: "Monday". */

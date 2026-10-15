@@ -126,7 +126,7 @@ export default function SettingsCard({
       fit
       footer={
         <DialogFooter>
-          <DialogButton variant="primary" onClick={onClose}>Done</DialogButton>
+          <DialogButton variant="secondary" onClick={onClose}>Done</DialogButton>
         </DialogFooter>
       }
     >
@@ -170,7 +170,7 @@ export default function SettingsCard({
       {exportNote && <StatusBanner tone={exportNote.tone} message={exportNote.message} style={{ marginBottom: 10 }} />}
       {signupsOpen && (
         <div style={{ ...signupBox, marginTop: 4 }}>
-          <span style={settingsNote}>Anyone can still sign up to your Supabase project. They&apos;d see nothing, but switch off &ldquo;Allow new users to sign up&rdquo;.</span>
+          <span style={settingsNote}>Anyone can sign up to your Supabase project. Switch off &ldquo;Allow new users to sign up&rdquo;.</span>
           {links && (
             <a href={links.authProviders} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--c-accent)", fontWeight: 600, fontSize: "var(--ui-type-label)", whiteSpace: "nowrap" }}>
               Open Supabase

@@ -1,15 +1,14 @@
 /*
  * An event under the cursor, on the time grid and in the month.
  *
- * It faded to 80% (the shared .ui-hover-opacity), which on a dark theme reads
- * as the event going dull at the moment you reach for it. The owner asked for
- * the other way round (29 Sep 2026): a little lighter on the three dark
- * themes, a little darker on Light, where lightening would wash it into the
- * page. A filter over the whole block, so the fill, the edge and the text move
- * together and keep their contrast with each other.
+ * Not faded (the shared .ui-hover-opacity), which on a dark theme reads as
+ * the event going dull at the moment you reach for it: a little lighter on
+ * the dark themes, a little darker on the light ones, where lightening would
+ * wash it into the page. A filter over the whole block, so the fill, the edge
+ * and the text move together and keep their contrast with each other.
  *
  * Here, beside the grids, rather than in globals.css, so it ships with them
- * (CLAUDE.md, Known Pitfalls).
+ * (CONTRIBUTING.md: a stylesheet can arrive older than the page).
  */
 .event {
   transition: filter var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out);

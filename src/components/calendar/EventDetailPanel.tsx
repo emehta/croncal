@@ -11,10 +11,14 @@ import {
   FileText,
   MapPin,
   PencilSimple,
+  Flag,
+  Tag,
 } from "@phosphor-icons/react";
-import type { CalendarEvent } from "@/types/calendar-event";
+import { EVENT_PRIORITIES, EVENT_TYPES, type CalendarEvent } from "@/types/calendar-event";
 import { describeRecurrence } from "@/lib/recurrence";
+import { getErrorMessage } from "@/lib/error-utils";
 import { useTimeFormat, formatTime } from "@/lib/time-format";
+import { zoneLabel, zoneOffset } from "@/lib/calendar-timezone";
 import StatusBanner from "@/components/StatusBanner";
 import GoogleBrandIcon from "@/components/GoogleBrandIcon";
 import { DAYS_SHORT, MONTHS_SHORT, isSameDay } from "@/lib/date-utils";
@@ -39,12 +43,15 @@ function formatDuration(start: Date, end: Date): string {
   return `${h}h ${m}m`;
 }
 
+/** "Thu 16 Oct 2026". */
 function formatDateLine(date: Date): string {
-  const day = DAYS_SHORT[date.getDay()];
-  const d = date.getDate();
-  const month = MONTHS_SHORT[date.getMonth()];
-  const year = date.getFullYear();
-  return `${day}, ${month} ${d}, ${year}`;
+  return `${DAYS_SHORT[date.getDay()]} ${date.getDate()} ${MONTHS_SHORT[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/** "New York (GMT-4)", the offset as it is on the day. */
+function formatZone(timeZone: string, at: Date): string {
+  const offset = timeZone === "UTC" ? "" : zoneOffset(timeZone, at);
+  return offset ? `${zoneLabel(timeZone)} (${offset})` : zoneLabel(timeZone);
 }
 
 export default function EventDetailPanel({
@@ -63,13 +70,16 @@ export default function EventDetailPanel({
 
   const timeStr = event.all_day
     ? "All day"
-    : `${formatTime(start, fmt)} – ${formatTime(end, fmt)} · ${formatDuration(start, end)}`;
+    : `${formatTime(start, fmt)} to ${formatTime(end, fmt)} · ${formatDuration(start, end)}`;
   const dateStr = isSameDay(start, end)
     ? formatDateLine(start)
-    : `${formatDateLine(start)} – ${formatDateLine(end)}`;
+    : `${formatDateLine(start)} to ${formatDateLine(end)}`;
+  const priority = EVENT_PRIORITIES.find((choice) => choice.value === event.importance);
+  const type = EVENT_TYPES.find((choice) => choice.value === event.event_type);
+  // A day of a Google series arrives without its rule: it says it repeats, and Edit reads how.
   const recurrenceDesc = event.recurrence
     ? describeRecurrence(event.recurrence, new Date(event.start_time))
-    : null;
+    : event.google?.repeatLabel ?? (event.google?.seriesId ? "Repeats" : null);
 
   async function handleDelete() {
     if (deleting) return;
@@ -77,8 +87,8 @@ export default function EventDetailPanel({
     setDeleteError("");
     try {
       await onDelete(event.id);
-    } catch {
-      setDeleteError("Could not delete this event. Try again.");
+    } catch (error) {
+      setDeleteError(getErrorMessage(error, "Could not delete this event. Try again."));
     } finally {
       setDeleting(false);
     }
@@ -116,12 +126,18 @@ export default function EventDetailPanel({
           <DetailRow icon={<Clock size={14} />}>{timeStr}</DetailRow>
           <DetailRow icon={<CalendarBlank size={14} />}>{dateStr}</DetailRow>
           {recurrenceDesc && <DetailRow icon={<ArrowsClockwise size={14} />}>{recurrenceDesc}</DetailRow>}
-          <DetailRow icon={<Globe size={14} />}>{event.timezone}</DetailRow>
-          {(event.source === "google" || event.sync_to_google) && (
-            <DetailRow icon={<GoogleBrandIcon size={14} />}>
-              {event.source === "google" ? "From Google Calendar" : "Synced to Google Calendar"}
+          {event.timezone && <DetailRow icon={<Globe size={14} />}>{formatZone(event.timezone, start)}</DetailRow>}
+          {priority && (
+            <DetailRow icon={<Flag size={14} />}>
+              <span className="ui-hue-ink" style={{ ["--hue" as string]: priority.color, fontWeight: 500 }}>{priority.label} priority</span>
             </DetailRow>
           )}
+          {type && (
+            <DetailRow icon={<Tag size={14} />}>
+              <span className="ui-hue-ink" style={{ ["--hue" as string]: type.color, fontWeight: 500 }}>{type.label}</span>
+            </DetailRow>
+          )}
+          {event.source === "google" && <DetailRow icon={<GoogleBrandIcon size={14} />}>From Google Calendar</DetailRow>}
         </div>
 
         {hasDetails && (

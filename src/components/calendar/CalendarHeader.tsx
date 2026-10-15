@@ -48,10 +48,8 @@ function navigate(view: "day" | "week" | "month", date: Date, dir: -1 | 1): Date
  * Sized to the page header row, not to its contents.
  *
  * 1px border + 2px padding on each side leaves NAV_ITEM_HEIGHT in the middle,
- * so the whole cluster comes to PAGE_HEADER_HEIGHT. It used to be 4px padding
- * around 32px buttons, which made it 43.5px — taller than the 32px title
- * beside it, so the row grew to 43.5 and the centred title dropped 8.5px.
- * That was the calendar's month name sitting lower than every other page's.
+ * so the whole cluster comes to PAGE_HEADER_HEIGHT. Any taller and it would
+ * win the row and drop the centred title below its place.
  */
 const NAV_ITEM_HEIGHT = PAGE_HEADER_HEIGHT - 2 * (1 + 2);
 
@@ -144,17 +142,13 @@ export default function CalendarHeader({
   }
 
   return (
-    /* One child, so the `gap: 8` this used to carry never applied to
-       anything — and the 12px margin was one of four different gaps between a
-       page title and its content. Both come from the shared numbers now. */
+    /* One child, so no gap; the space below is the shared PAGE_HEADER_GAP. */
     <div style={{ display: "flex", flexDirection: "column", marginBottom: PAGE_HEADER_GAP, flexShrink: 0 }}>
       {/*
         * Two columns, the same two the page uses below: the grid card and the
         * sidebar. The nav group right-aligns in the first, so its right edge
         * lands exactly on the card's, and the view switcher sits in the
-        * second. Previously all four controls were one right-aligned run with
-        * their own gap, and the Today group stopped five pixels short of the
-        * card edge — near enough to look like a mistake.
+        * second.
         */}
       <div style={{ display: "flex", alignItems: "center", gap: CALENDAR_COLUMN_GAP }}>
         {/* Mirrors the grid card */}
@@ -162,11 +156,9 @@ export default function CalendarHeader({
         {/* Left: Month Year + range label */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           {/*
-            text-2xl font-bold, like every other page title (CLAUDE.md). Same
-            24px as the --ui-type-title it replaces; what changes is the line
-            box, which was lineHeight 1.1 — 26.4px against the 32px the other
-            four pages get, so this title was both shorter and, once centred
-            in a taller row, lower than theirs.
+            text-2xl font-bold, as a page title is: 24px on a 32px line box,
+            the PAGE_HEADER_HEIGHT the row is sized to. A tighter line box
+            would leave the title shorter than its row and, centred, lower.
           */}
           <h1
             className="text-2xl font-bold"
@@ -234,7 +226,7 @@ export default function CalendarHeader({
               }}
             >
               <Plus size={14} weight="bold" aria-hidden="true" />
-              New event
+              Add event
             </button>
           )}
           {/* Nav arrows + Today, flush with the card's right edge */}
@@ -300,7 +292,7 @@ export default function CalendarHeader({
  * The phone header.
  *
  * The desktop row is five things wide and sized to the grid card and the
- * 200px sidebar beside it; at 390px it overlapped itself. Here it is two rows
+ * 200px sidebar beside it; at 390px it would overlap itself. Here it is two rows
  * that fit at 360px: the title with the view switcher, then the range with
  * the navigation. The controls are taller than on desktop because they are
  * aimed at with a thumb, and the labels are short forms of the same facts.
@@ -372,9 +364,9 @@ function PhoneCalendarHeader({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         {/*
           The range over its week number, not beside it. Side by side they
-          needed about 160px, and a phone leaves this side 134px at 360 and
+          need about 160px, and a phone leaves this side 134px at 360 and
           94px at 320 once the navigation is placed, so a week that crosses
-          two months ("27 Sep - 3 Oct") lost its end to an ellipsis.
+          two months ("27 Sep - 3 Oct") would lose its end to an ellipsis.
         */}
         <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
           {rangeLabel && (
@@ -441,8 +433,8 @@ function PhoneCalendarHeader({
               type="button"
               className="ui-hover-opacity-soft"
               onClick={onNewEvent}
-              aria-label="New event"
-              title="New event"
+              aria-label="Add event"
+              title="Add event"
               style={{
                 width: PHONE_NAV_HEIGHT,
                 height: PHONE_NAV_HEIGHT,

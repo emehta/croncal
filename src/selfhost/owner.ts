@@ -30,6 +30,10 @@ export async function requireOwner(request: Request): Promise<Owner> {
   const token = request.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
   if (!token) throw new SessionError("Sign in first.");
   const { data, error } = await adminClient(config).auth.getUser(token);
+  // Only Supabase refusing the token ends the session; an outage must not read as one.
+  if (error && !(error.status && error.status >= 400 && error.status < 500)) {
+    throw new SetupError("Could not reach Supabase. Try again in a moment.", 502);
+  }
   if (error || !data.user) throw new SessionError("Your session has ended. Sign in again.");
   if (data.user.app_metadata?.[OWNER_FLAG] !== true) throw new SetupError("Only this project's owner can do that.", 403);
   return { config, userId: data.user.id };

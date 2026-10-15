@@ -2,14 +2,12 @@
  * The browser's check on what `/api/google-calendar/events` sent back.
  * Pure, so it can be tested: `npm test -- google-events-response`.
  *
- * The response used to be returned exactly as parsed. A 200 carrying
- * anything but an array (a proxy's error page turned JSON, an object from a
- * changed route, a partial deploy) reached `mergeGoogleEvents`, whose
- * `for...of` threw "googleEvents is not iterable" inside a state update, and
- * the Home dashboard was replaced by the error boundary: weather, ticker,
- * tasks and all, over one tile's worth of data. An answer that is not a list
- * of complete events is now refused here, where each caller already handles
- * a refusal: Home keeps its local events, the calendar shows its banner.
+ * A 200 can carry anything but an array (a proxy's error page turned JSON,
+ * an object from a changed route, a partial update), and passed on as parsed
+ * it would throw where the events are merged, inside a state update, and
+ * take the page down to the error boundary. An answer that is not a list of
+ * complete events is refused here instead, where the caller already handles
+ * a refusal: the calendar keeps its own events and shows its banner.
  */
 
 import type { CalendarEvent } from "@/types/calendar-event";

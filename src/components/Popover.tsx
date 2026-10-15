@@ -10,11 +10,8 @@ import { createPortal } from "react-dom";
  * itself against the viewport and flipping placement when it will not fit,
  * closing on an outside click, closing on Escape before an enclosing modal
  * sees the keypress, and re-measuring on scroll and resize because it is
- * `position: fixed` over a page that moves.
- *
- * It lived under `components/tasks/` as `TaskPopover` until the dream diary
- * needed the same behaviour; nothing in it was ever task-specific. The date,
- * priority and category pickers and both row menus are all this.
+ * `position: fixed` over a page that moves. The date, time and select
+ * pickers are all this.
  */
 
 type Placement = "top" | "bottom";
@@ -74,12 +71,11 @@ export default function Popover({
       const viewportHeight = window.innerHeight;
 
       /*
-       * Never taller than the window. The row's date picker with its times is
-       * 620px, and in the 548px Safari leaves on an iPhone SE the clamp below
-       * put its top at -84: Today, Tomorrow and Next week sat above the
-       * screen, out of reach, on a panel that could not scroll. A panel that
-       * does not fit is held to the window and scrolls inside itself; one
-       * that fits is measured and placed exactly as it always was.
+       * Never taller than the window. A date picker with its times is 620px,
+       * and in the 548px Safari leaves on an iPhone SE the clamp below alone
+       * would put its top above the screen, out of reach, on a panel that
+       * could not scroll. A panel that does not fit is held to the window and
+       * scrolls inside itself; one that fits is measured and placed as is.
        *
        * A panel already held is measured with the hold taken off for the
        * moment (its own limit, if it has one, put back), so it lets go once
@@ -140,11 +136,10 @@ export default function Popover({
    * Both in the capture phase. Every dialog card stops mousedown on its way
    * up (Modal), so that a press inside a picker portalled out of the card is
    * not taken for a press on the backdrop. Heard in the bubble phase, a press
-   * inside a card never reached this, and a card's pickers only closed by
-   * choosing: opening Priority and then Goal on the task card left both open,
-   * and Date and Time with them (owner, 5 Oct 2026). Capture hears it before
-   * anything can stop it. Focus covers Tab: from a picker's field to the next
-   * one and open it, and the first used to stay open too.
+   * inside a card would never reach this, and opening a second picker on a
+   * card would leave the first open. Capture hears it before anything can
+   * stop it. Focus covers Tab: from a picker's field to the next one and open
+   * it, and the first closes.
    */
   useEffect(() => {
     if (!mounted) return;
@@ -182,22 +177,22 @@ export default function Popover({
     }
 
     // Capture Escape before an enclosing modal sees it. Otherwise one keypress
-    // closes both this top-most popover and the task dialog underneath it.
+    // closes both this top-most popover and the dialog underneath it.
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [mounted, anchorRef, onClose]);
 
   /*
    * Keyboard reach. The panel is portalled to <body>, outside any dialog it
-   * opens from, and it used to leave focus on the anchor: a picker opened with
-   * Enter could not be tabbed into, because Tab walked on from the chip and a
-   * dialog's focus trap never looks outside its own card.
+   * opens from, so with focus left on the anchor a picker opened with Enter
+   * could not be tabbed into: Tab walks on from the chip, and a dialog's
+   * focus trap never looks outside its own card.
    *
    * Opened from the keyboard (the anchor is showing its focus ring), focus
-   * moves to the panel's first control. Opened by mouse, nothing moves, so a
-   * click behaves as it always has. While focus is inside the panel, Tab
-   * cycles within it and never escapes to the page behind a dialog; Escape
-   * above still hands focus back to the anchor.
+   * moves to the panel's first control. Opened by mouse, nothing moves.
+   * While focus is inside the panel, Tab cycles within it and never escapes
+   * to the page behind a dialog; Escape above still hands focus back to the
+   * anchor.
    */
   useEffect(() => {
     if (!mounted || !position.ready) return;

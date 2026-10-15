@@ -18,20 +18,12 @@ interface ModalProps {
    * dialog rather than its contents.
    *
    * Anything animating position here should use the `translate` property, not
-   * `transform` — `offsetY` already owns `transform`, and the two compose.
+   * `transform`: `offsetY` already owns `transform`, and the two compose.
    */
   cardClassName?: string;
   /**
-   * The card's own surface, for the public site.
-   *
-   * Everything this wrapper is actually for — the focus trap, escape,
-   * click-outside, the scroll lock, handing focus back to the trigger — is the
-   * same on both sites, and none of it should be written twice. The surface is
-   * the one thing that differs: the signed-out pages are deliberately not
-   * themed, so a dialog there must not borrow the app's `--c-*` glass, which
-   * would arrive in whichever of the four themes the *app* is set to and read
-   * as a panel from a different site. Spread after the default, so leaving
-   * these off keeps today's behaviour exactly.
+   * The card's own style, spread after the default glass, so a caller can
+   * change its surface or size and keep everything else this wrapper does.
    */
   cardStyle?: React.CSSProperties;
   /** The wash over the page behind the card. Defaults to the app's scrim. */
@@ -57,22 +49,20 @@ export default function Modal({
 }: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   /*
-   * A phone has no room to spare around a dialog: the 24px frame took 48px
-   * off a screen already shared with the keyboard, and pushed the tallest
+   * A phone has no room to spare around a dialog: the 24px frame would take
+   * 48px off a screen already shared with the keyboard, and push the tallest
    * forms into scrolling inside a scroll.
    */
   const phone = usePhone();
   /*
    * Rendered into <body>, not where it is used.
    *
-   * Every dialog sat inside <main>, the element the app scrolls, and Safari
-   * (iPhone and Mac alike) passes a swipe over a fixed element on to the
-   * scrolling element around it in the DOM. So a swipe on a card that had
-   * nothing to scroll moved the page behind it, and read as the card
-   * scrolling with nothing in it. In <body>, whose overflow the lock below
-   * holds, there is nothing behind a card for a swipe to move. Chrome does
-   * not chain a fixed element's scroll that way, which is why it only showed
-   * in Safari. Mounted-gated because there is no <body> on the server.
+   * Safari (iPhone and Mac alike) passes a swipe over a fixed element on to
+   * the scrolling element around it in the DOM. Inside <main>, the element
+   * the app scrolls, a swipe on a card with nothing to scroll would move the
+   * page behind it. In <body>, whose overflow the lock below holds, there is
+   * nothing behind a card for a swipe to move. Mounted-gated because there
+   * is no <body> on the server.
    */
   const mounted = useSyncExternalStore(subscribeToNothing, () => true, () => false);
 
@@ -81,18 +71,18 @@ export default function Modal({
   }
 
   /*
-   * Whether this card is the one on top. A dialog can open over another (the
-   * calendar asks which days a change is for over the event form), and every
-   * open one listens to the same keys: Escape closed both, throwing away the
-   * form under the question, and both tried to hold Tab. The top one is the
-   * last mounted, which is the last in <body>.
+   * Whether this card is the one on top. A dialog can open over another (a
+   * question over the form it is about), and every open one listens to the
+   * same keys: otherwise Escape would close both, throwing away the form
+   * under the question, and both would hold Tab. The top one is the last
+   * mounted, which is the last in <body>.
    */
   function isTopmost(): boolean {
     const open = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
     return open[open.length - 1] === cardRef.current;
   }
 
-  // Escape to close, and keep Tab inside the dialog — without a trap, tabbing
+  // Escape to close, and keep Tab inside the dialog: without a trap, tabbing
   // walks straight out into the page behind the backdrop.
   useEffect(() => {
     function handle(e: KeyboardEvent) {
@@ -139,23 +129,27 @@ export default function Modal({
     /*
      * A dialog can nominate the control it wants focused with data-autofocus.
      *
-     * Without one this took querySelector(FOCUSABLE), which returns the first
-     * match in *document order* — and in any dialog with a header that is the
-     * close button, whatever the selector lists first. The task dialog set
-     * autoFocus on its title field and had it overridden a tick later by this
-     * effect, so a new task opened with the caret nowhere and Enter aimed at
-     * the X. React does not render an `autofocus` attribute, so there is
-     * nothing to match on unless the dialog says so explicitly.
+     * Without one this takes querySelector(FOCUSABLE), which returns the
+     * first match in *document order*: in any dialog with a header, the close
+     * button, whatever the selector lists first. A field's own autoFocus is
+     * overridden a tick later by this effect, and React does not render an
+     * `autofocus` attribute, so there is nothing to match on unless the
+     * dialog says so explicitly.
      */
     const target = card?.querySelector<HTMLElement>("[data-autofocus]")
       ?? card?.querySelector<HTMLElement>(FOCUSABLE);
     (target ?? card)?.focus();
 
-    return () => previouslyFocused?.focus?.();
+    return () => {
+      // Not when a card opened since has taken focus: it keeps it.
+      const now = document.activeElement;
+      if (now && now !== document.body && !card?.contains(now)) return;
+      previouslyFocused?.focus?.();
+    };
   }, [mounted]);
 
-  // Body scroll lock, keeping the scrollbar's room so a public page behind
-  // the card does not shift sideways (lib/document-scroll).
+  // Body scroll lock, keeping the scrollbar's room so a page behind the card
+  // does not shift sideways (lib/document-scroll).
   useEffect(() => lockDocumentScroll(), []);
 
   if (!mounted) return null;
@@ -177,7 +171,7 @@ export default function Modal({
       }}
       onMouseDown={(e) => {
         /* The second press of a double click that opened this card lands on
-           its scrim, and used to close it again at once. */
+           its scrim, and must not close it again at once. */
         if (e.detail > 1) return;
         if (cardRef.current && !cardRef.current.contains(e.target as Node) && !hasBusyAction()) onClose();
       }}
@@ -205,9 +199,8 @@ export default function Modal({
            * The card takes focus itself when nothing inside it holds it: on
            * open with no field to land on, or when you click its background
            * after a picker has closed. It is a container, not a control, so it
-           * draws no ring. Without this Chrome painted its own blue one round
-           * the whole card on the next keypress, which is what the task dialog
-           * showed after Enter.
+           * draws no ring. Without this Chrome paints its own blue one round
+           * the whole card on the next keypress.
            */
           outline: "none",
           transform: offsetY ? `translateY(${offsetY}px)` : undefined,

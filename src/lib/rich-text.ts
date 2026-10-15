@@ -1,11 +1,10 @@
 /**
- * Event descriptions that arrive as HTML. Pure, so it can be tested:
+ * Descriptions that arrive as HTML. Pure, so it can be tested:
  * `npm test -- rich-text`.
  *
  * Google Calendar stores a description written in its editor as HTML, so an
- * imported event's description is `<h1>…</h1><ul><li>…</li></ul>`. The event
- * card stripped the tags and the edit field showed them raw. Now the card
- * draws the formatting and the edit field gets clean text.
+ * imported event's description is `<h1>…</h1><ul><li>…</li></ul>`. The view
+ * card draws the formatting, and the edit field gets clean text.
  *
  * The HTML is someone else's, so nothing from it reaches the page as markup.
  * It is read into a small tree of known elements (headings, paragraphs, bold,

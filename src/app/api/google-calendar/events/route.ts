@@ -21,8 +21,9 @@ export async function GET(request: NextRequest) {
 
   /*
    * No tokeninfo check first: a missing scope or a dead token comes back from
-   * the events call itself as a "scope" failure, and asking Google twice put a
-   * round trip before every calendar load and every adjacent-month prefetch.
+   * the events call itself as a "scope" failure, and asking Google twice would
+   * put a round trip before every calendar load and every adjacent-month
+   * prefetch.
    */
   try {
     const events = await fetchGoogleCalendarEvents({ accessToken, timeMin, timeMax });

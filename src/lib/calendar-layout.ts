@@ -39,9 +39,16 @@ export function getClippedOccurrenceForDay(
   };
 }
 
-/** Minutes from the start of `day` to `date`, never negative. */
+/**
+ * Where `date` falls on `day`'s grid, in minutes from midnight: clock time,
+ * as the hour lines are drawn, held to the day (0 before it, 1440 after).
+ * Not the minutes elapsed since midnight, which on a daylight saving day are
+ * an hour off the clock, so a 9:00 event would sit on the 8:00 line.
+ */
 export function minutesFromDayStart(date: Date, day: Date): number {
-  return Math.max(0, (date.getTime() - startOfDay(day).getTime()) / 60000);
+  if (date.getTime() <= startOfDay(day).getTime()) return 0;
+  if (date.getTime() >= endOfDayExclusive(day).getTime()) return 24 * 60;
+  return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
 }
 
 /** `minutes` to the nearest `snap`-minute slot. */
@@ -61,11 +68,9 @@ export interface ColumnSlot {
  *
  * Each event takes the leftmost column free at its start. Every event in a
  * connected group of overlaps then shares one column count, the group's
- * widest. Taking it per event, from only the events it touched itself, let
- * two overlapping events disagree: at 9:00-10:00 beside 9:30-12:00, with the
- * later one also crowded to three columns by 10:00-11:00 and 10:30-11:00, the
- * first was drawn half wide and the second a third wide starting a third in,
- * and the two sat on top of each other between 9:30 and 10:00.
+ * widest. Taken per event, from only the events each touched itself, two
+ * overlapping events could disagree on their widths and be drawn on top of
+ * each other where they meet.
  */
 export function layoutEvents<T extends { renderStart: Date; renderEnd: Date }>(
   events: T[],

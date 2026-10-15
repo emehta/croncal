@@ -46,6 +46,7 @@ check("another site's write is refused", write({ ...own, origin: "https://attack
 check("a write with no Origin is refused", write({ "content-type": "application/json" }).status, 403);
 check("a write from 127.0.0.1's origin to localhost is refused", write({ ...own, origin: "http://127.0.0.1:3102" }).status, 403);
 check("a cross-site form post dressed as text/plain is refused", write({ ...own, "content-type": "text/plain" }).status, 415);
+check("a form upload is refused: CronCal takes none", write({ ...own, "content-type": "multipart/form-data; boundary=x" }).status, 415);
 check("same origin but the browser says cross-site is refused", write({ ...own, "sec-fetch-site": "cross-site" }).status, 403);
 
 process.env.VERCEL = "1";

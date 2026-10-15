@@ -1,9 +1,8 @@
 /**
  * Selecting an event on the calendar, and opening its card.
  *
- * The owner, 13 Oct 2026: a click opened the card straight away and never
- * showed the event as chosen. Now a click selects (the event fills solid in
- * its own colour) and a double click opens it. A finger cannot double-click
+ * A click selects (the event fills solid in its own colour) and a double
+ * click opens it, so the event shows as chosen. A finger cannot double-click
  * reliably (an iPhone sends no dblclick for a double tap), so a tap selects
  * and a tap on the event already selected opens it, which is the same two
  * presses. A key (Enter or Space on the focused event) opens it at once: a

@@ -11,12 +11,10 @@ export interface TimeZoneParts {
  * One formatter per zone, kept.
  *
  * Constructing an Intl.DateTimeFormat is among the more expensive calls in the
- * language, and this built a fresh one on every single read. Resolving one
- * wall-clock time to an instant calls getTimeZoneParts up to four times, and
- * expanding a recurrence does that once per occurrence — so drawing a month of
- * a daily event was constructing thousands of formatters to ask the same
- * question about the same zone. Measured over 200 such expansions: 1013ms
- * before, 85ms after.
+ * language. Resolving one wall-clock time to an instant calls getTimeZoneParts
+ * up to four times, and expanding a recurrence does that once per occurrence,
+ * so a fresh formatter per read would mean thousands to draw a month of a
+ * daily event, all asking the same question about the same zone.
  *
  * A formatter is immutable and stateless once built, so reusing one is safe.
  * The app deals in a handful of zones, so the map cannot grow unbounded in any
@@ -57,10 +55,10 @@ function hasUtcOffset(timestamp: string): boolean {
  * A Google all-day event arrives with no offset on its times
  * (lib/google-calendar.ts): it is a pair of calendar days, and a zoneless
  * timestamp is this device's wall clock. Read in the zone Google names
- * instead, or New York when it names none, those midnights fell on the day
- * before anywhere east of it, so in Singapore the form showed the 2nd for an
- * event on the 3rd, and saving it, even with only a new title, moved the
- * event in Google.
+ * instead, or New York when it names none, those midnights would fall on the
+ * day before anywhere east of it, so in Singapore the form would show the 2nd
+ * for an event on the 3rd, and saving it, even with only a new title, would
+ * move the event in Google.
  */
 export function eventFormTimeZone(
   event: { all_day?: boolean | null; start_time?: string | null; timezone?: string | null } | null | undefined,
@@ -150,3 +148,21 @@ export function makeUtcDateFromParts(parts: TimeZoneParts): Date {
   return new Date(partsToNaiveUtcMs(parts));
 }
 
+/** "GMT+8": the zone's offset at a moment, now unless given one. */
+export function zoneOffset(timeZone: string, at = new Date()): string {
+  try {
+    const part = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset" })
+      .formatToParts(at)
+      .find((entry) => entry.type === "timeZoneName");
+    return part?.value ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** "America/New_York" as "New York". */
+export function zoneLabel(timeZone: string): string {
+  if (timeZone === "UTC") return "UTC";
+  const city = timeZone.split("/").pop() ?? timeZone;
+  return city.replace(/_/g, " ");
+}

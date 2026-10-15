@@ -10,11 +10,11 @@ import { APP_NAME } from "@/selfhost/constants";
 import { OPEN_SETTINGS_EVENT, type SettingsSection } from "@/lib/open-settings";
 
 /**
- * The frame around the task list: a top bar with the name and Settings,
- * over the page, so the list scrolls up under it.
+ * The frame around the calendar: a top bar with the name and Settings,
+ * over the page, so the page scrolls up under it.
  */
 
-/* The room the list keeps at its foot (DOCK_ROOM reads it): a plain margin, as there is no dock. */
+/* The room the page keeps at its foot (DOCK_ROOM reads it): a plain margin, as there is no dock. */
 const FOOT_ROOM = "24px";
 
 export default function AppShell({
@@ -77,7 +77,7 @@ export default function AppShell({
             top: 0,
             left: 0,
             right: 0,
-            // Above a task being dragged (TaskList, 30) and below cards (Modal, 50).
+            // Above the page and below cards (Modal, 50).
             zIndex: 41,
             display: "flex",
             alignItems: "center",

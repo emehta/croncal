@@ -1,11 +1,11 @@
 /**
  * What a touch means, for the places a finger does something a mouse does
- * differently: the Reflect deck's and the flashcards' swipe, and the
- * calendar's tap.
+ * differently: a swipe that turns a card's day, and a tap on the calendar's
+ * day grid.
  *
  * Pure, so they can be tested, apart from `startsInSideScroller`, which reads
  * the page. Both fail silently: a scroll misread as a swipe flips the day
- * under someone reading a long entry, and a tap placed in the wrong slot
+ * under someone reading, and a tap placed in the wrong slot
  * offers an event at a time nobody chose.
  */
 
@@ -33,9 +33,9 @@ export function swipeTurn(dx: number, dy: number, canGoForward: boolean): SwipeT
 
 /*
  * Whether a touch began inside something that scrolls sideways on its own,
- * such as the Reflect mood strip or a formula too wide for its card. Flicking
- * that is a horizontal drag across the card, and read as a swipe it turned
- * the card instead of scrolling the strip.
+ * such as a strip of chips or a formula too wide for its card. Flicking that
+ * is a horizontal drag across the card, and read as a swipe it would turn the
+ * card instead of scrolling the strip.
  */
 export function startsInSideScroller(target: HTMLElement, deck: HTMLElement): boolean {
   for (let el: HTMLElement | null = target; el && el !== deck; el = el.parentElement) {

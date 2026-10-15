@@ -10,15 +10,20 @@ import styles from "./ScopePicker.module.css";
 
 /**
  * Which days of a repeating event a change is for, asked once the change is
- * made: after Save, a drop or Delete. A choice and then Confirm, as Google
- * Calendar asks it, with nothing under the title or the options. It used to
- * come before the form, with a paragraph and a line under every option, and
- * a press on an option was the decision itself (the owner, 5 Oct 2026).
+ * made: after Save, a drop or Delete. A choice, then the button that does
+ * it, as Google Calendar asks it, with nothing under the title or the options.
  *
  * It opens over the event form, and Cancel or Escape closes only this, so
  * the changes in the form are still there.
  */
+
+const ACTION_LABELS = {
+  save: ["Save", "Saving…"],
+  move: ["Move", "Moving…"],
+  delete: ["Delete", "Deleting…"],
+} as const;
 export default function ScopePicker({
+  action,
   title,
   options,
   value,
@@ -29,6 +34,7 @@ export default function ScopePicker({
   error,
   onDismissError,
 }: {
+  action: keyof typeof ACTION_LABELS;
   title: string;
   options: readonly RecurrenceEditScope[];
   value: RecurrenceEditScope;
@@ -93,8 +99,8 @@ export default function ScopePicker({
           <DialogButton variant="secondary" onClick={onCancel} disabled={busy}>
             Cancel
           </DialogButton>
-          <DialogButton variant="primary" onClick={onConfirm} busy={busy} disabled={busy}>
-            {busy ? "Saving…" : "Confirm"}
+          <DialogButton variant={action === "delete" ? "danger" : "primary"} armed={action === "delete"} onClick={onConfirm} busy={busy} disabled={busy}>
+            {ACTION_LABELS[action][busy ? 1 : 0]}
           </DialogButton>
         </div>
       </div>

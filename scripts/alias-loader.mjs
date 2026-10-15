@@ -2,7 +2,7 @@
  * Lets a plain `node` test import app modules by their `@/…` alias.
  *
  * Node strips the types out of a .ts file on its own, so a test needs no build
- * step — but it does not read tsconfig, so `@/lib/foo` means nothing to it and
+ * step, but it does not read tsconfig, so `@/lib/foo` means nothing to it and
  * the extension the alias omits has to be put back.
  *
  * Register it from the test:
@@ -24,9 +24,9 @@ const SRC = join(dirname(dirname(fileURLToPath(import.meta.url))), "src");
 
 export async function resolve(specifier, context, next) {
   /*
-   * next.config.ts imports "./src/lib/public-routes" with the extension left
-   * off, which Next's loader allows and Node's does not. Put it back, so a
-   * test can load the config Next loads.
+   * A relative import with the extension left off, which Next's loader
+   * allows and Node's does not. Put it back, so a test can load a module the
+   * way Next does.
    */
   if (/^\.\.?\//.test(specifier) && context.parentURL && !/\.[a-z]+$/i.test(specifier)) {
     const path = fileURLToPath(new URL(specifier, context.parentURL));

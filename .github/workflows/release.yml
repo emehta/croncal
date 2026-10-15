@@ -1,8 +1,10 @@
 name: Release download
 
 # A published GitHub release gets the download attached: dist/croncal.zip,
-# built from the release's own commit after the same checks as every push.
-# The README's install command fetches the latest one.
+# built from the release's own commit once the types, the lint and the tests
+# pass, then started once to show it runs. Every push already runs these on
+# Mac, Windows and Linux (ci.yml). The README's install command fetches the
+# latest one.
 
 on:
   release:
@@ -23,6 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - run: npm run package
       - run: node scripts/smoke.mjs dist/croncal

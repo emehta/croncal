@@ -47,12 +47,12 @@ function errorText(error: unknown): string {
 const NETWORK = /failed to fetch|networkerror|load failed|network request failed/i;
 
 /** What a person is told when the server could not be reached at all. */
-export const OFFLINE_MESSAGE = "Couldn't reach Supabase. Check that you're online, then try again.";
+export const OFFLINE_MESSAGE = "Could not reach Supabase. Check that you're online, then try again.";
 
 /**
  * An error in words for a banner. A dropped connection says so plainly:
  * Supabase's client reports it as "TypeError: Failed to fetch" with a stack
- * trace in its details, which showed in the banner word for word.
+ * trace in its details, which would show in the banner word for word.
  */
 export function getErrorMessage(error: unknown, fallback: string): string {
   const text = errorText(error);

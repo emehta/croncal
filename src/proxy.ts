@@ -5,8 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
  *
  * - A request whose Host is not this computer's own loopback name is a page
  *   elsewhere pointing a name of its own at it (DNS rebinding): refused.
- * - The app has one address, http://localhost:PORT, the one Publik's guides
- *   open: a page opened on 127.0.0.1 or [::1] is moved there, so there is one
+ * - The app has one address, http://localhost:PORT, the one npm start
+ *   opens: a page opened on 127.0.0.1 or [::1] is moved there, so there is one
  *   sign-in and one saved session (the browser keeps them per address). Not
  *   with an HTTP redirect: Next reads every loopback name as "localhost",
  *   takes a redirect between them for one to its own origin, and cuts its
@@ -14,8 +14,8 @@ import { NextResponse, type NextRequest } from "next/server";
  *   was, forever, whichever way round. A small page that moves the browser
  *   itself is not rewritten.
  * - A write must come from the app's own pages: its Origin is the app's,
- *   the browser says it is same-origin, and it is JSON or a form upload. A
- *   page on another site can post to localhost, and this is what stops it.
+ *   the browser says it is same-origin, and it is JSON. A page on another
+ *   site can post to localhost, and this is what stops it.
  *
  * A copy on the web (Vercel) has its own domain and HTTPS, and is left alone.
  */
@@ -66,7 +66,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.json({ error: "Requests from other sites are refused." }, { status: 403 });
   }
   const type = request.headers.get("content-type") ?? "";
-  if (!type.startsWith("application/json") && !type.startsWith("multipart/form-data")) {
+  if (!type.startsWith("application/json")) {
     return NextResponse.json({ error: "Send JSON." }, { status: 415 });
   }
   return NextResponse.next();

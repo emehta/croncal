@@ -75,6 +75,21 @@ check("an overnight event is clipped to midnight",
 check("minutes into the day", minutesFromDayStart(at(9, 30), DAY), 570);
 check("never negative", minutesFromDayStart(new Date(2026, 8, 24, 23), DAY), 0);
 check("snaps to the nearest quarter", [snapToSlot(7), snapToSlot(8), snapToSlot(52)], [0, 15, 45]);
+check("the end of the day is the bottom of the grid", minutesFromDayStart(new Date(2026, 8, 26), DAY), 24 * 60);
+
+/* Daylight saving: an event sits on its own hour line, as the clock reads,
+   on the days the clock jumps. New York's, whatever this machine's zone. */
+{
+  const zone = process.env.TZ;
+  process.env.TZ = "America/New_York";
+  const spring = new Date(2026, 2, 8); // clocks go from 2:00 to 3:00
+  const autumn = new Date(2026, 10, 1); // clocks go from 2:00 back to 1:00
+  check("on the spring-forward day, 9:00 is on the 9:00 line", minutesFromDayStart(new Date(2026, 2, 8, 9), spring), 9 * 60);
+  check("and 1:30, before the jump, on the 1:30 line", minutesFromDayStart(new Date(2026, 2, 8, 1, 30), spring), 90);
+  check("on the fall-back day, 9:00 is on the 9:00 line", minutesFromDayStart(new Date(2026, 10, 1, 9), autumn), 9 * 60);
+  process.env.TZ = zone;
+  if (zone === undefined) delete process.env.TZ;
+}
 
 if (failures.length) {
   console.error(failures.join("\n"));

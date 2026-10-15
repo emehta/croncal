@@ -35,7 +35,11 @@
     "src/lib/page-cache.ts"
   ],
   "cuts": {
-    "src/lib/auth-users.ts": "The source app's PIN sign-in. CronCal's owner is the project's one account (src/selfhost/owner.ts, behind src/lib/owner.ts)."
+    "src/lib/auth-users.ts": "The source app's PIN sign-in. CronCal's owner is the project's one account (src/selfhost/owner.ts, behind src/lib/owner.ts).",
+    "src/lib/task-order.ts": "Todoer's tasks, for a Tasks row CronCal doesn't draw.",
+    "src/types/task.ts": "Todoer's tasks, for a Tasks row CronCal doesn't draw.",
+    "src/components/tasks/PriorityWash.module.css": "Todoer's tasks, for a Tasks row CronCal doesn't draw.",
+    "src/lib/use-url-target.ts": "Deep links for the source app's search, which CronCal doesn't have."
   },
   "ignorePackages": []
 }

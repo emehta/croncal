@@ -3,10 +3,10 @@
  * be tested: `npm test -- series-edit`.
  *
  * The form opens on the day that was clicked, and only Save asks which days
- * the change is for (the owner's order, 5 Oct 2026: asking first, before
- * anything was changed, was backwards). So the save has to work out what was
- * changed on that day, which days it can go to, and, for every day of a
- * CronCal series, where the series' first day and its changed days move.
+ * the change is for, once there is a change to ask about. So the save has to
+ * work out what was changed on that day, which days it can go to, and, for
+ * every day of a CronCal series, where the series' first day and its changed
+ * days move.
  */
 
 import type { CalendarEvent, GoogleEventChanges, RecurrenceEditScope } from "@/types/calendar-event";

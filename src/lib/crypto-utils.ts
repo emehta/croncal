@@ -1,43 +1,10 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
+import { secretsMatch } from "@/selfhost/compare";
 
 /*
- * Constant-time checks for the server's shared secrets and signed values.
- * Server only: node:crypto is not in a browser bundle, and nothing here should be.
+ * Signed values for the Google connect cookies. Server only: node:crypto is
+ * not in a browser bundle, and nothing here should be.
  */
-
-/** Constant-time comparison, so a secret cannot be recovered a byte at a time. */
-export function secretsMatch(provided: string | null | undefined, expected: string | undefined): boolean {
-  if (!provided || !expected) return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
-/** The token from an `Authorization: Bearer …` header, or null. */
-export function bearerToken(header: string | null | undefined): string | null {
-  const match = header?.match(/^Bearer (.+)$/);
-  return match ? match[1] : null;
-}
-
-/**
- * The subject a JWT names, read without checking its signature.
- *
- * Only for starting a read early, beside the check that proves the token:
- * whatever it starts is used only when the verified user is this one, and
- * thrown away otherwise.
- */
-export function unverifiedJwtSubject(token: string | null | undefined): string | null {
-  const payload = token?.split(".")[1];
-  if (!payload) return null;
-  try {
-    const claims: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    const subject = claims !== null && typeof claims === "object" ? (claims as { sub?: unknown }).sub : null;
-    return typeof subject === "string" && subject !== "" ? subject : null;
-  } catch {
-    return null;
-  }
-}
 
 function signature(value: string, secret: string): string {
   return createHmac("sha256", secret).update(value).digest("base64url");

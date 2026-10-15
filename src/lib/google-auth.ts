@@ -1,5 +1,6 @@
 import { getAdminClient } from "@/lib/supabase-admin";
 import { ownerById, readGoogleClient } from "@/selfhost/google-client";
+import { SetupError } from "@/selfhost/server";
 import { googleEndpoints } from "@/lib/google-endpoints";
 
 /* What CronCal asks Google for: the events of the user's calendars, nothing else.
@@ -55,9 +56,9 @@ export async function getGoogleAuth(userId: string): Promise<GoogleAuth | null> 
     .maybeSingle();
 
   /*
-   * A failed read is thrown, not answered as "no row": that made a Supabase
-   * hiccup read as Google disconnected, a 401 asking for a reconnect that
-   * would fix nothing.
+   * A failed read is thrown, not answered as "no row": that would make a
+   * Supabase hiccup read as Google disconnected, a 401 asking for a reconnect
+   * that would fix nothing.
    */
   if (error) throw error;
   return (data as GoogleAuth | null) ?? null;
@@ -103,6 +104,9 @@ function isReconnectRequiredRefreshFailure(errorText: string): boolean {
   return (
     normalized.includes("invalid_grant") ||
     normalized.includes("invalid_request") ||
+    // The client's secret changed, or the client was deleted: a new one and a reconnect fix it.
+    normalized.includes("invalid_client") ||
+    normalized.includes("unauthorized_client") ||
     normalized.includes("token has been expired or revoked") ||
     (normalized.includes("refresh token") && normalized.includes("expired"))
   );
@@ -158,7 +162,7 @@ export async function getGoogleAccessTokenState(
     };
   }
 
-  // Token expired or expiring soon — refresh it
+  // Token expired or expiring soon: refresh it
   try {
     const res = await fetch(googleEndpoints().token, {
       method: "POST",
@@ -202,9 +206,10 @@ export async function getGoogleAccessTokenState(
     const sb = await getAdminClient();
     /*
      * The write has to be checked. The builder resolves with { error } instead
-     * of rejecting, so a failed save fell straight through to "refreshed": the
-     * request in hand worked, nothing was persisted, and every request after
-     * it refreshed again against Google's quota, silently and forever.
+     * of rejecting, so unchecked, a failed save would fall straight through to
+     * "refreshed": the request in hand would work, nothing would be persisted,
+     * and every request after it would refresh again against Google's quota,
+     * silently and forever.
      */
     const { error: saveError } = await sb
       .from("google_auth")
@@ -244,22 +249,24 @@ export async function revokeGoogleAuth(userId: string): Promise<void> {
    */
   const token = auth?.refresh_token || auth?.access_token;
   if (token) {
-    try {
-      await fetch(`${googleEndpoints().revoke}?token=${encodeURIComponent(token)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
-      });
-    } catch {
-      // Best-effort revoke
+    /* Google answers 200 for a revoked grant and 400 for one already gone;
+       anything else, or no answer, leaves the grant live at Google, so the
+       tokens are kept and the user asked to try again rather than told it worked. */
+    const response = await fetch(`${googleEndpoints().revoke}?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
+    }).catch(() => null);
+    if (!response || (!response.ok && response.status !== 400)) {
+      throw new SetupError("Could not reach Google, so CronCal is still connected. Try again in a moment.", 502);
     }
   }
 
   /*
    * The service role bypasses RLS, so a row that exists is a row this can
-   * delete — but the error was being dropped entirely, which made a failed
-   * disconnect indistinguishable from a successful one. Disconnecting and
-   * being told it worked, while the tokens are still stored, is the one
+   * delete, but the error still has to be read: dropped, it would make a
+   * failed disconnect indistinguishable from a successful one. Disconnecting
+   * and being told it worked, while the tokens are still stored, is the one
    * outcome this function must never produce.
    */
   const sb = await getAdminClient();
@@ -276,8 +283,10 @@ export async function upsertGoogleAuth(input: {
   token_expiry: string;
   calendar_id: string;
 }) {
-  // The stored row is read only for its refresh token, which a consent screen always sends anew.
-  const refreshToken = input.refresh_token || (await getGoogleAuth(input.userId))?.refresh_token || null;
+  /* The stored row is read only for its refresh token, which a consent screen
+     always sends anew; and only for the same Google account, never another's. */
+  const stored = input.refresh_token ? null : await getGoogleAuth(input.userId);
+  const refreshToken = input.refresh_token || (stored?.google_email === input.google_email ? stored.refresh_token : null) || null;
 
   if (!refreshToken) {
     throw new Error("Missing Google refresh token. Reconnect Google Calendar and try again.");

@@ -23,10 +23,10 @@ interface WidthStore {
 }
 
 /*
- * One store per width, made once. Written inline, `subscribe` was a new
- * function every render, so React unsubscribed and subscribed again (a new
- * matchMedia and its listener) on every render of the sixty-odd components
- * that ask, and every snapshot read built another MediaQueryList.
+ * One store per width, made once. Written inline, `subscribe` would be a new
+ * function every render, so React would unsubscribe and subscribe again (a
+ * new matchMedia and its listener) on every render of every component that
+ * asks, and every snapshot read would build another MediaQueryList.
  */
 const widthStores = new Map<number, WidthStore>();
 
@@ -57,9 +57,9 @@ export function useMinWidth(minWidth: number, serverValue = true): boolean {
 /**
  * Whether this is the phone layout, by the app's one breakpoint.
  *
- * The single name for a question thirty components ask. Each used to spell
- * it out as `!useMinWidth(APP_PHONE_BREAKPOINT)`, and one copy with the
- * breakpoint mistyped would lay a page out for the wrong device.
+ * The single name for a question many components ask, so no copy of
+ * `!useMinWidth(APP_PHONE_BREAKPOINT)` can mistype the breakpoint and lay a
+ * page out for the wrong device.
  */
 export function usePhone(): boolean {
   return !useMinWidth(APP_PHONE_BREAKPOINT);

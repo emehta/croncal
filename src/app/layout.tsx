@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
  * server component as references, not values. scripts/first-paint.test.mjs
  * keeps the two equal.
  */
-const THEME_KEY = "vitae-theme";
+const THEME_KEY = "theme";
 
 /**
  * Runs before first paint, so a reload never flashes the wrong theme: it

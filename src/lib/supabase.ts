@@ -8,7 +8,7 @@ import type { BrowserConfig } from "@/selfhost/config";
  * layout passes the config to `ConfigProvider`, which calls
  * `configureSupabase` before anything below it renders.
  *
- * `supabase` stays an object every caller imports as before; it forwards to
+ * `supabase` is an object every caller imports; it forwards to
  * the real client, and throws only if something uses it before setup.
  */
 

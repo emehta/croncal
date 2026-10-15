@@ -5,8 +5,8 @@
  *
  * A Google series is one event (the series) carrying RFC 5545 rule lines
  * (`RRULE:FREQ=WEEKLY;BYDAY=MO`, `EXDATE…`), plus one exception for each day
- * changed or deleted on its own. Measured against Google on 5 Oct 2026, and
- * what everything here is built around:
+ * changed or deleted on its own. Measured against Google, and what
+ * everything here is built around:
  *
  * - A field set on the series reaches every day, the changed days included,
  *   and overwrites that field on them. Fields not set are left alone.

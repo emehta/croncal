@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
  * system's own grey box after roughly a second: unthemed, unstyleable, and
  * slow enough that you have usually clicked before it arrives.
  *
- * No open delay at all, by request. The usual argument for one is that
+ * No open delay at all. The usual argument for one is that
  * sweeping a cursor across a row of buttons pops a bubble over each in turn;
  * the answer here is that the bubble is small, appears where the cursor
  * already is, and vanishes the instant the cursor leaves or presses.
@@ -45,10 +45,9 @@ export default function Tooltip({
   /**
    * A string for the usual one-line label, or a node for a richer bubble.
    *
-   * A plain string keeps the original behaviour exactly: one line, no wrap. A
-   * node is allowed to wrap and to change size while it is open — the market
-   * ribbon's bubble counts down to the opening bell — which is what the
-   * observer below exists for.
+   * A plain string is one line, no wrap. A node is allowed to wrap and to
+   * change size while it is open, which is what the observer below exists
+   * for.
    */
   label: React.ReactNode;
   placement?: Placement;
@@ -80,14 +79,9 @@ export default function Tooltip({
      * The listener has to be on the capture phase, because a scroll event does
      * not bubble and a tooltip inside a scrolling panel still has to close. But
      * capturing at the window means catching every scroll in the document,
-     * including from elements that have nothing to do with this anchor — and
-     * the dashboard has one that scrolls *itself* on every animation frame.
-     *
-     * The market ribbon's rail is a marquee driven by writing `scrollLeft` from
-     * requestAnimationFrame, roughly 120 events a second. The portfolio pill
-     * sits beside it, not inside it, so its tooltip could never move — and it
-     * was being closed within a frame of opening, every time. Measured: the
-     * bubble survived 0 ms with the rail running and 1555 ms with it stopped.
+     * including from elements that have nothing to do with this anchor, such
+     * as a marquee that scrolls *itself* on every animation frame and would
+     * close a bubble beside it within a frame of opening.
      *
      * Containment is the whole test. A scrolling ancestor carries the anchor
      * with it, so the bubble must go; the page itself counts, because
@@ -114,9 +108,9 @@ export default function Tooltip({
    *
    * `label` is deliberately not a dependency. A node prop is a new object on
    * every render of the parent, so depending on it would re-run this effect,
-   * which sets state, which renders again — a loop. A ResizeObserver covers
+   * which sets state, which renders again: a loop. A ResizeObserver covers
    * the case that actually matters instead: content that grows or shrinks
-   * while the bubble is open, which a live countdown does.
+   * while the bubble is open.
    */
   useLayoutEffect(() => {
     if (!open) return;

@@ -29,11 +29,9 @@ const DAYS_HEADER_SUNDAY_FIRST = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat
 /**
  * A week row is a fixed height so the scroll arithmetic is exact.
  *
- * The month used to be six rows of `flex: 1` inside a container that only
- * scrolled if they overflowed — which they never did, so scrolling up or down
- * did nothing at all and the only way to change month was the arrows. A fixed
- * row height turns the month into a strip that can be scrolled through the way
- * the week view is scrolled sideways.
+ * A fixed row height turns the month into a strip that can be scrolled
+ * through the way the week view is scrolled sideways; rows that only fill
+ * their container never overflow it, so there would be nothing to scroll.
  */
 const ROW_HEIGHT = 116;
 
@@ -124,9 +122,9 @@ export default function MonthGrid({
 
     const byDay = new Map<string, CalendarOccurrence[]>();
     /*
-     * getOccurrencesForDay expanded every event over the whole range and threw
-     * all but one day away, once per cell. Forty-two cells meant forty-two
-     * expansions of the same list; a scrolling strip would have meant hundreds.
+     * Not getOccurrencesForDay per cell, which expands every event over the
+     * whole range and throws all but one day away: on a scrolling strip,
+     * hundreds of expansions of the same list.
      */
     for (const occurrence of getAllOccurrencesInRange(events, rangeStart, rangeEnd)) {
       const cursor = startOfDay(occurrence.start < rangeStart ? rangeStart : occurrence.start);
@@ -231,7 +229,7 @@ export default function MonthGrid({
   }, []);
 
   /*
-   * An external month change — the arrows, Today, switching into this view —
+   * An external month change (the arrows, Today, switching into this view)
    * rebuilds the strip around it. A month this grid reported itself is already
    * on screen, so it is left alone.
    */
@@ -288,10 +286,9 @@ export default function MonthGrid({
    *
    * Extending only from the scroll handler is one missed event away from a
    * dead end: land exactly on the last row and there is nothing left to
-   * scroll, so no further event fires and the strip can never grow. Reached
-   * that way the month view simply stopped, and only scrolling back up freed
-   * it. Checked after every render of the strip as well, which converges —
-   * each extension adds more rows than the threshold asks for.
+   * scroll, so no further event fires and the strip can never grow. Checked
+   * after every render of the strip as well, which converges: each extension
+   * adds more rows than the threshold asks for.
    */
   useEffect(() => {
     const el = scrollerRef.current;
@@ -425,14 +422,14 @@ export default function MonthGrid({
                 >
                   {/*
                     * Everything in a day outside the month on screen is faded
-                    * together — number, events and the overflow count.
+                    * together: number, events and the overflow count.
                     *
-                    * Dimming only the number was not enough to tell you which
-                    * month you were looking at: the strip runs continuously
-                    * through them now, so a screen showing mostly October has
-                    * a row of September in it, and those events were as loud
-                    * as October's. The opacity is on a wrapper rather than the
-                    * cell so the grid lines keep their strength.
+                    * Dimming only the number is not enough to tell you which
+                    * month you are looking at: the strip runs continuously
+                    * through them, so a screen showing mostly October has a
+                    * row of September in it, its events as loud as October's.
+                    * The opacity is on a wrapper rather than the cell so the
+                    * grid lines keep their strength.
                     */}
                   <div
                     style={{
@@ -457,9 +454,7 @@ export default function MonthGrid({
                         fontWeight: today ? 700 : 400,
                         /*
                          * The same tag today wears in the week view's heading
-                         * and the mini calendar. It was a hardcoded #3b82f6
-                         * disc with #fff on it — a blue belonging to no theme,
-                         * and the only circle left in the calendar.
+                         * and the mini calendar, in the theme's own colours.
                          */
                         color: today ? "var(--cal-today-text)" : inMonth ? "var(--c-text-2)" : "var(--c-text-4)",
                         background: today ? "var(--c-accent-strong)" : "transparent",

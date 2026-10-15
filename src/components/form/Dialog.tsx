@@ -8,15 +8,12 @@ import styles from "./form.module.css";
 import danger from "./DangerFill.module.css";
 
 /**
- * The card every add, edit and view dialog is drawn in: events, tasks, goals,
- * habits, dreams and scripts.
+ * The card every add, edit and view dialog is drawn in.
  *
- * One width and one height for all of them, the owner's choice on 29 Sep
- * 2026. They were 420 to 940 wide and as tall as whatever was in them, so an
- * event with a long description opened a card twice the size of the one
- * before it, and a habit, a task and an event looked like three apps. The
- * header and the buttons stay put; whatever does not fit scrolls between
- * them.
+ * One width and one height for all of them, so a long description never
+ * opens a card twice the size of the one before it, and every card looks
+ * like the same app. The header and the buttons stay put; whatever does not
+ * fit scrolls between them.
  */
 export const DIALOG_MAX_WIDTH = 640;
 const DIALOG_HEIGHT = "min(680px, calc(100dvh - 48px))";
@@ -50,9 +47,8 @@ export function DialogCard({
   onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
   closeLabel?: string;
   /**
-   * Only for a card whose content is not a form: Ramble's, which listens in
-   * a small card and grows to the standard width to show what it heard
-   * (the owner, 7 Oct 2026: the full size was "too large for no reason").
+   * Only for a card whose content is not a form, such as one that listens
+   * in a small card and grows to the standard width to show what it heard.
    * Every add, edit and view card keeps the standard size.
    */
   maxWidth?: number;
@@ -72,7 +68,7 @@ export function DialogCard({
    * The scroll fades: which edges have more beyond them, written straight
    * to the body as data-fade, so scrolling never renders the card. The
    * masks are in form.module.css; every picker opens in a portal, so a
-   * mask here cannot hide one (CLAUDE.md: a mask hides popovers).
+   * mask here cannot hide one (CONTRIBUTING.md: a mask hides popovers).
    */
   useEffect(() => {
     const body = bodyRef.current;
@@ -107,10 +103,10 @@ export function DialogCard({
         display: "flex",
         flexDirection: "column",
         /*
-         * Clipped, not hidden: overflowY "hidden" made overflowX "auto", and
-         * a card that can scroll sideways showed a scrollbar under its
+         * Clipped, not hidden: overflowY "hidden" makes overflowX "auto", and
+         * a card that can scroll sideways shows a scrollbar under its
          * buttons whenever something inside it (or something a browser
-         * extension puts beside a text field) ran a pixel wide. A clipped
+         * extension puts beside a text field) runs a pixel wide. A clipped
          * card cannot be scrolled at all, by a finger or by the browser
          * bringing a caret into view. Only the body between header and
          * buttons scrolls, and only down.

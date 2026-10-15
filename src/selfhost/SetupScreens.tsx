@@ -7,7 +7,7 @@ import { DialogButton } from "@/components/form/Dialog";
 import { FieldGroup, FieldStack, TextField } from "@/components/form/fields";
 import { getErrorMessage } from "@/lib/error-utils";
 import { supabase } from "@/lib/supabase";
-import { APP_NAME } from "@/selfhost/constants";
+import { APP_NAME, ITEMS } from "@/selfhost/constants";
 import { dashboardLinks, projectRef } from "@/selfhost/keys";
 
 /**
@@ -107,7 +107,7 @@ export function ConnectScreen({
       await postJson("/api/selfhost/connect", { url, publishableKey, secretKey });
       onConnected();
     } catch (failure) {
-      setError(getErrorMessage(failure, "That did not work. Try again."));
+      setError(getErrorMessage(failure, "That didn't work. Try again."));
       setBusy(false);
     }
   }
@@ -119,9 +119,9 @@ export function ConnectScreen({
         mode === "rejected" ? (
           <p>Supabase no longer accepts the saved keys. Paste your project&apos;s current ones.</p>
         ) : mode === "switch" ? (
-          <p>Paste the other project&apos;s URL and keys. Your tasks stay in the old one.</p>
+          <p>Paste the other project&apos;s URL and keys. Your {ITEMS} stay in the old one.</p>
         ) : (
-          <p>Your tasks live in your own free Supabase project. Setup takes about five minutes.</p>
+          <p>Your {ITEMS} live in your own Supabase project.</p>
         )
       }
     >
@@ -181,6 +181,7 @@ export function DatabaseScreen({
   const [showing, setShowing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copyNote, setCopyNote] = useState<string | null>(null);
   const links = projectRefValue ? dashboardLinks(projectRefValue) : null;
   const copyFirst = !copied && !showing && !stillMissing;
 
@@ -204,13 +205,13 @@ export function DatabaseScreen({
 
   function copy() {
     if (!sql) return;
-    setError(null);
+    setCopyNote(null);
     navigator.clipboard.writeText(sql).then(
       () => setCopied(true),
       () => {
         // The clipboard was refused: the setup is shown to copy by hand instead.
         setShowing(true);
-        setError("Your browser didn't allow copying. Select the setup below and copy it.");
+        setCopyNote("Your browser didn't allow copying. Select the setup below and copy it.");
       },
     );
   }
@@ -226,9 +227,9 @@ export function DatabaseScreen({
       title={update ? "Update your database" : "Add the tables"}
       intro={
         update ? (
-          <p>This version changes its tables. Running the setup again keeps all your tasks.</p>
+          <p>This version changes its tables. Running the setup again keeps all your {ITEMS}.</p>
         ) : (
-          <p>Connected. One paste in Supabase adds {APP_NAME}&apos;s tables.</p>
+          <p>Connected.</p>
         )
       }
     >
@@ -241,6 +242,7 @@ export function DatabaseScreen({
         <li>Come back and press Check again.</li>
       </Steps>
       {error && <StatusBanner message={error} />}
+      {copyNote && <StatusBanner tone="info" message={copyNote} />}
       {!error && stillMissing && !checking && (
         <StatusBanner tone="info" message={update ? "Still the old tables. Make sure Run finished without an error." : "No tables yet. Make sure Run finished without an error."} />
       )}
@@ -304,7 +306,7 @@ export function CreateAccountScreen({ onTheWeb, onCreated }: { onTheWeb: boolean
       await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password }).catch(() => undefined);
       await onCreated();
     } catch (failure) {
-      setError(getErrorMessage(failure, "That did not work. Try again."));
+      setError(getErrorMessage(failure, "That didn't work. Try again."));
       setBusy(false);
       // "Already has its account": asking again moves this screen on to sign-in.
       await onCreated();
@@ -361,7 +363,7 @@ export function SignInScreen({ projectRefValue }: { projectRefValue: string | nu
         setBusy(false);
       }
     } catch (failure) {
-      setError(getErrorMessage(failure, "That did not work. Reload the page and try again."));
+      setError(getErrorMessage(failure, "That didn't work. Reload the page and try again."));
       setBusy(false);
     }
   }
@@ -381,7 +383,7 @@ export function SignInScreen({ projectRefValue }: { projectRefValue: string | nu
       const { error: signInError } = await supabase.auth.signInWithPassword({ email: answer.email, password });
       if (signInError) throw new Error(`The password was changed, but signing in failed: ${signInError.message}`);
     } catch (failure) {
-      setError(getErrorMessage(failure, "That did not work. Try again."));
+      setError(getErrorMessage(failure, "That didn't work. Try again."));
       setBusy(false);
     }
   }

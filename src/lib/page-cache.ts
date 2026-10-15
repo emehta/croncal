@@ -5,14 +5,14 @@
  *
  * The signed-in pages each start empty, fire their queries on mount and block
  * the whole screen until the answers land. Clicking between them therefore
- * paid the full round trip every single time — measured at 360ms to 660ms per
+ * paid the full round trip every single time, measured at 360ms to 660ms per
  * navigation against a 300ms query, and longer on a real connection.
  *
  * This holds the last answer in memory so a return visit paints immediately
  * and the refetch happens behind it. Nothing here changes what a page shows
  * once its query resolves: every page still fetches on every mount, so the
  * cache only ever decides what is on screen for the first few hundred
- * milliseconds. That is deliberate — a cache that could serve stale data as
+ * milliseconds. That is deliberate: a cache that could serve stale data as
  * final would be a correctness problem, and this one cannot.
  *
  * In memory on purpose: a reload should go to the network, and this never

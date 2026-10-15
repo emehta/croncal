@@ -1,7 +1,7 @@
 /**
  * A time of day as the app writes it ("3:42 PM", "15:42"), given the format:
- * no preference read and no React, so server code shares it (the reminders,
- * lib/reminders/plan). lib/time-format reads the owner's preference and
+ * no preference read and no React, so server code can share it.
+ * lib/time-format reads the owner's preference and
  * holds the hook; its `formatTime` is this.
  */
 

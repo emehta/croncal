@@ -38,10 +38,9 @@ export type GoogleEventTime = { date: string } | { dateTime: string; timeZone: s
  *
  * An all-day event is a pair of calendar dates, end exclusive, and the dates
  * are the event's own: the form sends local midnight as a UTC instant, so in
- * Singapore the 26th arrives as 16:00 on the 25th. This used to read the date
- * off that instant in the server's zone, UTC on Vercel, so every all-day
- * event synced to Google started a day early. Reading it in the event's zone
- * gives back the day that was picked.
+ * Singapore the 26th arrives as 16:00 on the 25th. Read in the server's
+ * zone, that instant would start the event a day early; read in the event's
+ * zone, it gives back the day that was picked.
  */
 export function googleEventTiming(fields: {
   start_time?: unknown;
@@ -139,8 +138,7 @@ export function changesTiming(changes: GoogleEventChanges): boolean {
 /**
  * The fields of a Google event a save sets, other than its times and its
  * rule, as Google spells them. An emptied text field is sent as "", which
- * clears it: it used to be sent as undefined, which JSON drops, so emptying a
- * description or a location saved nothing. A colour that is not one of
+ * clears it, not as undefined, which JSON drops. A colour that is not one of
  * Google's eleven is not sent, and the three things Google has no field for
  * go into the event's private properties, where null removes one.
  */
@@ -232,9 +230,7 @@ export function readGoogleEventCreate(body: Record<string, unknown>): GoogleEven
  * location; the times in the event's own zone; a repeat as Google's rule,
  * anchored on the first day; attendees; one of Google's eleven colours; and,
  * in the private properties, the importance, type and link Google has no
- * field for. It used to send the title, times, colour and attendees only, so
- * a repeating event reached Google as one day and its type, importance and
- * link were never there. An empty field is left out rather than sent empty.
+ * field for. An empty field is left out rather than sent empty.
  */
 export function googleCreateBody(event: GoogleEventCreate): Record<string, unknown> | null {
   const timing = googleEventTiming(event);

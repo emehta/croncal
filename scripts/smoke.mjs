@@ -12,7 +12,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -72,8 +72,6 @@ check("a page on 127.0.0.1 moves to localhost", moved.includes(`location.replace
 
 const page = await fetch(`http://localhost:${PORT}/calendar`, { redirect: "manual" }).catch(() => null);
 check("localhost serves the app", page?.status === 200, String(page?.status));
-const html = page ? await page.text() : "";
-check("the page carries no secret key", !html.includes("sb_secret_"));
 
 const write = await fetch(`http://localhost:${PORT}/api/selfhost/connect`, {
   method: "POST",
@@ -97,6 +95,23 @@ const foreign = await new Promise((resolve) => {
   }).on("error", () => resolve(null));
 });
 check("a foreign Host (DNS rebinding) is refused", foreign === 421, String(foreign));
+
+/*
+ * Connected to a made-up project. The config is read on each request, so no
+ * restart: the page now carries the publishable key, which shows the config
+ * reached it, and must still carry nothing of the secret key.
+ */
+const FAKE = {
+  url: "https://smoketestsmoketestsm.supabase.co",
+  publishableKey: "sb_publishable_smoketest",
+  secretKey: "sb_secret_smoketest",
+};
+writeFileSync(path.join(dataDir, "config.json"), JSON.stringify(FAKE), { mode: 0o600 });
+const connected = await fetch(`http://localhost:${PORT}/calendar`).then((r) => r.text()).catch(() => "");
+check("a connected page carries the publishable key", connected.includes(FAKE.publishableKey));
+check("a connected page carries no secret key", !connected.includes(FAKE.secretKey));
+const connectedStatus = await fetch(`${base}/api/selfhost/status`).then((r) => r.text()).catch(() => "");
+check("the status carries no secret key", connectedStatus !== "" && !connectedStatus.includes(FAKE.secretKey));
 
 let leaked = false;
 const walk = (dir) => {

@@ -42,7 +42,7 @@ export interface GoogleEventMeta {
   seriesId: string | null;
   /** Only the organiser of an ordinary event can split its series from one day onwards. */
   canSplit: boolean;
-  /** The owner said no to this invitation: Home leaves it off their day. */
+  /** The owner said no to this invitation. */
   declined?: boolean;
   /**
    * The series' repeat. A one-off is "none" from the start; a day of a series
@@ -88,3 +88,20 @@ export interface GoogleEventCreate extends GoogleEventChanges {
   all_day: boolean;
   timezone: string;
 }
+
+type EventChoice<T> = { value: T; label: string; color: string };
+
+/** An event's priority, high to low, in Todoer's priority colours. */
+export const EVENT_PRIORITIES: EventChoice<NonNullable<CalendarEvent["importance"]>>[] = [
+  { value: "high", label: "High", color: "var(--priority-high, #eb8909)" },
+  { value: "medium", label: "Medium", color: "var(--c-info)" },
+  { value: "low", label: "Low", color: "var(--priority-low, #808080)" },
+];
+
+export const EVENT_TYPES: EventChoice<NonNullable<CalendarEvent["event_type"]>>[] = [
+  { value: "work", label: "Work", color: "#246fe0" },
+  { value: "relaxation", label: "Relaxation", color: "#a855f7" },
+  { value: "admin", label: "Admin", color: "#eb8909" },
+  { value: "free", label: "Free time", color: "#22c55e" },
+  { value: "personal", label: "Personal", color: "#e85c3a" },
+];

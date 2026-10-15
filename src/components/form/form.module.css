@@ -1,23 +1,21 @@
 /*
- * The one look for every card that adds, edits or shows a thing: events,
- * tasks, goals, habits, dreams and scripts.
+ * The one look for every card that adds, edits or shows a thing.
  *
  * Here, in a module that ships with the components, rather than in
- * globals.css: Vercel has served new components against a globals.css chunk
- * built before the commit (CLAUDE.md, Known Pitfalls), and a field that
- * arrived without its border would be the "just a line" this replaced.
+ * globals.css: a stylesheet can arrive older than the page that uses it
+ * (CONTRIBUTING.md), and a field that arrived without its border would be
+ * just a line.
  */
 
 /* ─── Fields ─────────────────────────────────────────────────────────────── */
 
 /*
  * A text field is a box: the surface, a border at the field weight, square
- * corners. The title fields were a bare underline and the descriptions had no
- * edge at all, so the owner could not tell where to type.
+ * corners, so it is plain where to type.
  *
- * Focus firms the border to the theme's own ink. It was a 2px ring in the
- * accent (.ui-field in globals.css), which in Midnight is green, and every
- * native picker drew it the moment it opened.
+ * Focus firms the border to the theme's own ink, not a ring in the accent,
+ * which in Midnight is green and which every native picker would draw the
+ * moment it opened.
  */
 .field {
   display: flex;
@@ -251,10 +249,8 @@
 /* ─── Buttons ────────────────────────────────────────────────────────────── */
 
 /*
- * One size and one set of looks for every card's buttons. The cards had a
- * pill-shaped Edit, a transparent Delete that the owner could not tell was a
- * button, Save on the left of one card and the right of the next, and five
- * different heights between them.
+ * One size and one set of looks for every card's buttons: Delete always
+ * reads as a button, and Save sits in the same place on every card.
  */
 .button {
   display: inline-flex;
@@ -312,7 +308,7 @@
 
 /* Armed: the solid fill and its own ink, set per theme by DangerFill.module.css
    (DialogButton adds its class), never --c-on-accent over --c-danger, which
-   was 3.3:1 on Midnight. */
+   is 3.3:1 on Midnight. */
 .danger[data-armed="true"] {
   background: var(--danger-fill, #b42318);
   border-color: var(--danger-fill, #b42318);
@@ -350,7 +346,7 @@
 
 /*
  * Scrolls down only. With overflow-y alone, overflow-x quietly becomes auto
- * too, so anything a pixel too wide gave the card a sideways scrollbar.
+ * too, so anything a pixel too wide would give the card a sideways scrollbar.
  */
 .body {
   flex: 1 1 auto;
@@ -436,7 +432,7 @@
   outline-color: var(--c-text-1);
 }
 
-/* ─── Rich text (an imported event's description) ────────────────────────── */
+/* ─── Rich text (a description that came as HTML) ────────────────────────── */
 
 .rich {
   color: var(--c-text-2);

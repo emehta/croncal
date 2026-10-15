@@ -2,11 +2,11 @@
  * Times as a person types them, and the slots the time picker lists. Pure, so
  * it can be tested: `npm test -- time-input`.
  *
- * The time fields on the cards were the browser's own `<input type="time">`,
- * which draws the operating system's picker: a spinner on one machine, a clock
- * face on another, and on a phone a wheel that ignores the theme entirely.
- * TimeField lists the day in steps and takes whatever is typed, so this is
- * what "whatever is typed" means.
+ * TimeField stands in for the browser's own `<input type="time">`, which
+ * draws the operating system's picker: a spinner on one machine, a clock face
+ * on another, and on a phone a wheel that ignores the theme entirely. It
+ * lists the day in steps and takes whatever is typed, so this is what
+ * "whatever is typed" means.
  */
 
 /** "HH:MM", 24-hour, the form every time is stored and compared in. */

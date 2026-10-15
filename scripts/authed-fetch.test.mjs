@@ -3,7 +3,7 @@
  *
  * One bug is worth the whole file: two refreshes running at once. Supabase
  * treats a refresh token spent twice as a stolen token and terminates the
- * session, so the symptom is being signed out while actively using the app —
+ * session, so the symptom is being signed out while actively using the app,
  * and it only reproduces when two requests 401 in the same tick, which is
  * exactly what opening a panel that mounts two authenticated rows does.
  *
@@ -44,7 +44,7 @@ function freshSession(token) {
  * Release the first `n` callers together.
  *
  * Without this the two requests run a few microtasks apart, the first refresh
- * finishes before the second starts, and the race never appears — a version
+ * finishes before the second starts, and the race never appears: a version
  * of this test without the barrier passed against the very bug it was written
  * for. The real page fires both from effects in the same commit, so arriving
  * together is the honest simulation, not a contrivance.
@@ -141,7 +141,7 @@ function install({ unauthorizedFirstCall = true, holdUntil = 0 } = {}) {
 }
 
 {
-  // A 401 that is not about the session — a disconnected Google account — must
+  // A 401 that is not about the session (a disconnected Google account) must
   // not trigger a refresh or a retry, or every request made while Google is
   // unlinked doubles.
   const state = install({ unauthorizedFirstCall: false });

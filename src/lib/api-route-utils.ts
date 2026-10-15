@@ -8,10 +8,10 @@ import { SetupError } from "@/selfhost/server";
 /**
  * Shared plumbing for the route handlers.
  *
- * Every handler used to repeat the same two blocks verbatim: a try/catch that
- * maps `AuthAccessError` to its status and everything else to a logged 500, and
- * — in the five Google Calendar routes — a 25-line token-state ladder. Both are
- * here once so a handler reads as the thing it actually does.
+ * The two blocks every handler would otherwise repeat: a try/catch that maps
+ * `AuthAccessError` to its status and everything else to a logged 500, and,
+ * for the Google Calendar routes, the token-state ladder. Both are here once
+ * so a handler reads as the thing it actually does.
  */
 
 /**
@@ -22,7 +22,7 @@ import { SetupError } from "@/selfhost/server";
  * `fallbackMessage` rather than an internal detail.
  *
  * The session errors also carry a code, so `authedFetch` can tell a stale
- * login token — worth one retry on a fresh one — from a 401 about a connected
+ * login token (worth one retry on a fresh one) from a 401 about a connected
  * service, which is never worth retrying.
  */
 export function handleRouteError(
@@ -48,8 +48,8 @@ export function handleRouteError(
 
 /**
  * The request body as a JSON object, or null when it is missing, malformed or
- * not an object. A bare `await request.json()` threw on a bad body, and the
- * route's catch-all answered a client mistake with a 500.
+ * not an object. A bare `await request.json()` throws on a bad body, and the
+ * route's catch-all would answer a client mistake with a 500.
  */
 export async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
   const body: unknown = await request.json().catch(() => null);
@@ -97,7 +97,13 @@ export async function requireGoogleAccessToken(
     };
   }
 
-  const tokenState = await getGoogleAccessTokenState(userId);
+  let tokenState: Awaited<ReturnType<typeof getGoogleAccessTokenState>>;
+  try {
+    tokenState = await getGoogleAccessTokenState(userId);
+  } catch (error) {
+    // Supabase or the saved settings failed: said as such, not as Next's bare 500.
+    return { ok: false, response: handleRouteError(error, "Google token check", "Could not read the Google connection. Try again in a moment.") };
+  }
 
   if (tokenState.status === "missing_auth") {
     return {
@@ -132,21 +138,7 @@ export async function requireGoogleAccessToken(
   return { ok: true, userId, accessToken: tokenState.accessToken };
 }
 
-/**
- * The OAuth callback URL.
- *
- * Google requires the value sent when starting the flow to match the value sent
- * when exchanging the code *exactly*, so both sides resolve it here.
- *
- * The request's own origin wins over GOOGLE_REDIRECT_URI whenever the two
- * disagree. A stale value in that variable used to be silent and fatal: after
- * the site moved domains it still pointed at the old one, so Google named the
- * old host on its consent screen and then returned the user to a domain that
- * no longer served the callback — a Vercel 404 at the end of a successful
- * sign-in, with nothing to indicate why. The variable is still honoured when it
- * agrees with the request, which is the case it exists for (a proxy in front of
- * the app), and the mismatch is logged rather than swallowed.
- */
+/** The OAuth callback URL for this request, by the rule in lib/google-redirect-uri; a mismatch is logged. */
 export function getGoogleRedirectUri(request: NextRequest): string {
   const { uri, warning } = resolveGoogleRedirectUri(
     process.env.GOOGLE_REDIRECT_URI,

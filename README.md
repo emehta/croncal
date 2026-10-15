@@ -58,7 +58,7 @@ CronCal's first screen, **Set up CronCal**, walks you through it:
 
 Already use [Todoer](https://github.com/emehta/todoer)? Give CronCal the same project: after step 4 it asks you to sign in with your Todoer account instead of making one.
 
-Then switch off sign-ups, so the project stays yours: in Supabase, **Authentication**, **Sign In / Providers**, switch off **Allow new users to sign up**, then **Save changes**. Strangers could see none of your events anyway; Settings reminds you until it's off.
+Then switch off sign-ups, so the project stays yours: in Supabase, **Authentication**, **Sign In / Providers**, switch off **Allow new users to sign up**, then **Save changes**. Strangers could see none of your events anyway; Settings shows a reminder until it's off.
 
 Leave **Enable Data API** on (**Integrations**, **Data API**): CronCal talks to your project through it.
 
@@ -79,7 +79,7 @@ CronCal connects through a Google Cloud client of your own, so no one else's app
 5. **Make the client.** Open **Clients**, press **Create client**, choose **Web application**, and under **Authorized redirect URIs** press **Add URI** and paste `http://localhost:3102/api/auth/google/callback` (CronCal's Settings shows it, ready to copy). Press **Create**, and keep the window with the **Client ID** and **Client secret** open.
 6. **Connect.** In CronCal, open **Settings**, paste both under **Google Calendar**, press **Save**, then **Connect**. Choose your account. Google says it hasn't verified the app, because it's yours rather than a published one: press **Advanced**, then go on to CronCal, tick calendar access, and continue.
 
-Your Google events then show beside CronCal's, with an eye in the sidebar to hide them. A new event goes into Google too, unless you switch off **Sync to Google Calendar** in its form.
+Your Google events then show beside CronCal's, with an eye in the sidebar to hide them. With **Sync to Google Calendar** on in its form, a new event goes into Google Calendar instead of CronCal.
 
 ## Open it again
 

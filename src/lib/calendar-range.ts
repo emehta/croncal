@@ -5,14 +5,12 @@
  * The week view is a continuous strip, not a paged calendar week. A jump to a
  * date (Today, the arrows, the mini calendar) centres that day so it has its
  * neighbours on both sides, and a scroll can stop on any day. So the seven
- * columns on screen are usually *not* the calendar week the chosen date sits
- * in, and the header used to describe that week anyway: "Sunday 20th to
- * Saturday 26th" above a grid running Wednesday 23 to Tuesday 29. Everything
- * the header and the mini calendar say about the week now comes from the
- * window actually on screen.
+ * columns on screen are usually not the calendar week the chosen date sits
+ * in, and everything the header and the mini calendar say about the week
+ * comes from the window on screen.
  */
 
-import { DAY_NAMES, DAYS_SHORT, MONTH_NAMES, MONTHS_SHORT, ordinal } from "@/lib/date-utils";
+import { DAYS_SHORT, MONTHS_SHORT } from "@/lib/date-utils";
 
 export interface DayWindow {
   /** Local midnight of the first visible day. */
@@ -64,27 +62,24 @@ export function weekBadge({ start, end }: DayWindow): string {
   return first === last ? `Week ${first}` : `Weeks ${first} to ${last}`;
 }
 
+/** "Thu 16 Oct", the way every date in CronCal is written. */
+function dayLabel(date: Date): string {
+  return `${DAYS_SHORT[date.getDay()]} ${date.getDate()} ${MONTHS_SHORT[date.getMonth()]}`;
+}
+
 /**
- * The desktop range: "Wednesday 23rd to Tuesday 29th", naming the month on
- * the far end only when it differs ("Monday 28th to Sunday, October 4th").
- * A one-day window is written as the day alone.
+ * The desktop range: "Wed 23 to Tue 29 Sep", or "Mon 28 Sep to Sun 4 Oct"
+ * across a month. A one-day window is the day alone.
  */
 export function formatWindowLabel({ start, end }: DayWindow): string {
-  const first = `${DAY_NAMES[start.getDay()]} ${ordinal(start.getDate())}`;
-  if (start.getTime() === end.getTime()) {
-    return `${DAY_NAMES[start.getDay()]}, ${MONTH_NAMES[start.getMonth()]} ${ordinal(start.getDate())}`;
-  }
-  const last = start.getMonth() === end.getMonth()
-    ? `${DAY_NAMES[end.getDay()]} ${ordinal(end.getDate())}`
-    : `${DAY_NAMES[end.getDay()]}, ${MONTH_NAMES[end.getMonth()]} ${ordinal(end.getDate())}`;
-  return `${first} to ${last}`;
+  if (start.getTime() === end.getTime()) return dayLabel(start);
+  const first = start.getMonth() === end.getMonth() ? `${DAYS_SHORT[start.getDay()]} ${start.getDate()}` : dayLabel(start);
+  return `${first} to ${dayLabel(end)}`;
 }
 
 /** The phone range: "23 to 29 Sep", or "28 Sep to 4 Oct" across a month. */
 export function formatWindowLabelShort({ start, end }: DayWindow): string {
-  if (start.getTime() === end.getTime()) {
-    return `${DAYS_SHORT[start.getDay()]} ${start.getDate()} ${MONTHS_SHORT[start.getMonth()]}`;
-  }
+  if (start.getTime() === end.getTime()) return dayLabel(start);
   return start.getMonth() === end.getMonth()
     ? `${start.getDate()} to ${end.getDate()} ${MONTHS_SHORT[end.getMonth()]}`
     : `${start.getDate()} ${MONTHS_SHORT[start.getMonth()]} to ${end.getDate()} ${MONTHS_SHORT[end.getMonth()]}`;

@@ -1,24 +1,16 @@
 "use client";
 
 /**
- * The themes, and the two lines that switch between them.
- *
- * Lifted out of `Sidebar.tsx` when universal search gained "switch to Light
- * theme" as a command. A second copy of `applyTheme` is exactly the
- * duplication that let the dashboard and the task pages disagree about
- * priority colours: both copies work, and then one of them learns about a
- * fifth theme and the other does not.
- *
- * The names themselves live in `lib/themes.ts`, which has no "use client" so
- * the root layout can write them into its pre-paint script, the third reader
- * of `vitae-theme`.
+ * The saved theme, and the two lines that switch between them. The names
+ * live in `lib/themes.ts`, which has no "use client" so the root layout can
+ * write them into its pre-paint script, the other reader of the saved theme.
  */
 
 import { isThemeValue, type ThemeValue } from "@/lib/themes";
 
 export type { ThemeValue } from "@/lib/themes";
 
-export const THEME_STORAGE_KEY = "vitae-theme";
+export const THEME_STORAGE_KEY = "theme";
 
 /** The saved theme, or Midnight for anything unreadable or unrecognised. */
 export function readStoredTheme(): ThemeValue {
@@ -47,11 +39,8 @@ export function applyTheme(theme: ThemeValue): void {
 
 /**
  * Choose a theme: persist it, paint it, and tell the rest of the tab.
- *
- * `storage` only fires in *other* tabs, so a switch made from search would
- * leave the sidebar's own radio group showing the previous theme until
- * something else re-rendered it. The same `vitae-preference` event the week
- * start and time format already use covers this tab.
+ * `storage` only fires in other tabs, so this tab hears the same
+ * `preference-change` event the week start and time format send.
  */
 export function setTheme(theme: ThemeValue): void {
   try {
@@ -60,5 +49,5 @@ export function setTheme(theme: ThemeValue): void {
     // Apply the current choice even if the browser blocks persistence.
   }
   applyTheme(theme);
-  window.dispatchEvent(new Event("vitae-preference"));
+  window.dispatchEvent(new Event("preference-change"));
 }

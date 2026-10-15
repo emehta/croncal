@@ -2,12 +2,10 @@
  * Each theme's content colours.
  *
  * A content colour is a fixed hue that belongs to the thing rather than the
- * theme: a Google event's colour, a goal's, a habit category's, the weather
- * icon's. Mixed into each theme's surface they worked on Midnight and turned
- * every other theme into the same app on a new background, so a theme may now
- * carry its own version of each one, drawn from its own named hues, with the
- * meaning kept (a red event is still red, a yellow one still yellow). The
- * owner picked the themes from previews built this way (11 Oct 2026).
+ * theme: a Google event's colour, a goal's. Painted as stored on every theme,
+ * they would make each one the same app on a new background, so a theme may
+ * carry its own version of each, drawn from its own named hues, with the
+ * meaning kept (a red event is still red, a yellow one still yellow).
  *
  * The stored colour never changes. It is translated where it is painted:
  * `contentColor` turns it into `var(--pal-<hex>, <hex>)`, and the root layout
@@ -24,17 +22,14 @@ import { contrastRatio, luminance, readableOn } from "@/lib/readable-on";
 import { THEME_VALUES, type ThemeValue } from "@/lib/themes";
 
 /**
- * Every content colour the app paints, lower case, by where it comes from:
- * Google's eleven event colours and its default (lib/google-calendar), the
- * goal palette (types/category), the habit categories (types/habit) and the
- * weather icon (components/WeatherWidget). A colour in two lists is one
- * entry in a palette.
+ * Every content colour a palette covers, lower case, by where it comes from:
+ * Google's eleven event colours and its default (CronCal's
+ * lib/google-calendar) and the goal palette (Todoer's types/category). A
+ * colour in both lists is one entry in a palette.
  */
 export const CONTENT_SOURCES = {
   google: ["#7986cb", "#33b679", "#8e24aa", "#e67c73", "#f6bf26", "#f4511e", "#039be5", "#616161", "#3f51b5", "#0b8043", "#d50000", "#4285f4"],
   goal: ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#808080"],
-  habit: ["#9c6ade", "#2e9e8f", "#26c6da", "#4caf50", "#ff9800", "#fdd835", "#4f8fe8"],
-  weather: ["#f59e0b", "#eab308", "#9ca3af", "#d1d5db", "#60a5fa", "#3b82f6", "#2563eb", "#93c5fd", "#bfdbfe", "#7c3aed"],
 } as const;
 
 export type ContentPalette = Readonly<Record<string, string>>;
@@ -69,22 +64,6 @@ export const CONTENT_PALETTES: Readonly<Partial<Record<ThemeValue, ContentPalett
     "#8b5cf6": "#9f6bd9",
     "#ec4899": "#e36199",
     "#808080": "#818387",
-    // habit
-    "#9c6ade": "#ad74dd",
-    "#2e9e8f": "#15b6a9",
-    "#26c6da": "#66cfe1",
-    "#4caf50": "#23ba7d",
-    "#ff9800": "#f2a036",
-    "#fdd835": "#f0c630",
-    "#4f8fe8": "#598ced",
-    // weather
-    "#9ca3af": "#9fa2a5",
-    "#d1d5db": "#cbced2",
-    "#60a5fa": "#4eace3",
-    "#2563eb": "#4175da",
-    "#93c5fd": "#8cd8ec",
-    "#bfdbfe": "#b7e3f1",
-    "#7c3aed": "#8a70dd",
   },
   indigo: {
     // google
@@ -114,22 +93,6 @@ export const CONTENT_PALETTES: Readonly<Partial<Record<ThemeValue, ContentPalett
     "#8b5cf6": "#957fb8",
     "#ec4899": "#d27e99",
     "#808080": "#717c7c",
-    // habit
-    "#9c6ade": "#957fb8",
-    "#2e9e8f": "#6a9589",
-    "#26c6da": "#a3d4d5",
-    "#4caf50": "#98bb6c",
-    "#ff9800": "#ffa066",
-    "#fdd835": "#e6c384",
-    "#4f8fe8": "#7e9cd8",
-    // weather
-    "#9ca3af": "#938aa9",
-    "#d1d5db": "#b8b4d0",
-    "#60a5fa": "#7fb4ca",
-    "#2563eb": "#658594",
-    "#93c5fd": "#9cabca",
-    "#bfdbfe": "#a3d4d5",
-    "#7c3aed": "#957fb8",
   },
   dusk: {
     // google
@@ -159,22 +122,6 @@ export const CONTENT_PALETTES: Readonly<Partial<Record<ThemeValue, ContentPalett
     "#8b5cf6": "#c4a7e7",
     "#ec4899": "#eb6f92",
     "#808080": "#908caa",
-    // habit
-    "#9c6ade": "#c4a7e7",
-    "#2e9e8f": "#6dc3b8",
-    "#26c6da": "#9ccfd8",
-    "#4caf50": "#8fd4a1",
-    "#ff9800": "#f59b62",
-    "#fdd835": "#f6c177",
-    "#4f8fe8": "#3e8fb0",
-    // weather
-    "#9ca3af": "#908caa",
-    "#d1d5db": "#c6c3df",
-    "#60a5fa": "#9ccfd8",
-    "#2563eb": "#5670bb",
-    "#93c5fd": "#a2b2e8",
-    "#bfdbfe": "#e0def4",
-    "#7c3aed": "#c4a7e7",
   },
   oxblood: {
     // google
@@ -204,22 +151,6 @@ export const CONTENT_PALETTES: Readonly<Partial<Record<ThemeValue, ContentPalett
     "#8b5cf6": "#8765e5",
     "#ec4899": "#ee649f",
     "#808080": "#9b908a",
-    // habit
-    "#9c6ade": "#9271df",
-    "#2e9e8f": "#14ab9b",
-    "#26c6da": "#26c2cf",
-    "#4caf50": "#3bbb5a",
-    "#ff9800": "#de9803",
-    "#fdd835": "#bfab08",
-    "#4f8fe8": "#2294d9",
-    // weather
-    "#9ca3af": "#b7aca5",
-    "#d1d5db": "#e0d4cd",
-    "#60a5fa": "#2da0e4",
-    "#2563eb": "#0b7de2",
-    "#93c5fd": "#58b1e7",
-    "#bfdbfe": "#73b4e1",
-    "#7c3aed": "#7f57e1",
   },
   paper: {
     // google
@@ -249,22 +180,6 @@ export const CONTENT_PALETTES: Readonly<Partial<Record<ThemeValue, ContentPalett
     "#8b5cf6": "#7253a6",
     "#ec4899": "#b24b73",
     "#808080": "#7a7268",
-    // habit
-    "#9c6ade": "#8460b0",
-    "#2e9e8f": "#3a8a7f",
-    "#26c6da": "#3a93aa",
-    "#4caf50": "#55904a",
-    "#ff9800": "#c97a26",
-    "#fdd835": "#d6ab24",
-    "#4f8fe8": "#4673b2",
-    // weather
-    "#9ca3af": "#857b6f",
-    "#d1d5db": "#9b9183",
-    "#60a5fa": "#5683b4",
-    "#2563eb": "#2b5a99",
-    "#93c5fd": "#6f93ba",
-    "#bfdbfe": "#8ea6bf",
-    "#7c3aed": "#6a46a0",
   },
 };
 
@@ -282,7 +197,7 @@ export function contentColor(color: string): string {
 
 /**
  * The ink for a mark or a title drawn on a content colour, as the current
- * theme paints it: a habit's tick, a selected event's title on its solid fill.
+ * theme paints it: a selected event's title on its solid fill.
  * Only those (`INKED`) have one set per theme; any other falls back to the
  * ink for the colour as stored.
  */
@@ -326,8 +241,8 @@ export function paletteColor(color: string, theme: ThemeValue): string {
   return (key && CONTENT_PALETTES[theme]?.[`#${key}`]) || color;
 }
 
-/** The colours a mark or a title is drawn on: the habits' (a tick) and the events' (a selected one). */
-const INKED: readonly string[] = [...new Set([...CONTENT_SOURCES.habit, ...CONTENT_SOURCES.google])];
+/** The colours a title is drawn on: the events' (a selected one). */
+const INKED: readonly string[] = CONTENT_SOURCES.google;
 
 /**
  * The palette rules for the page head. A theme with a palette sets every

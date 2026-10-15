@@ -153,9 +153,8 @@ export interface ChoiceOption<T extends string> {
 }
 
 /**
- * One of a few options, as chips. The shared chip (lib/styles CHOICE_CHIP):
- * the scripts card, the event card and the habit card each drew "selected"
- * their own way before, in the option's colour, a raw hex wash, or neither.
+ * One of a few options, as chips: the shared chip (lib/styles CHOICE_CHIP),
+ * so every card draws "selected" the same way.
  */
 export function ChoiceChips<T extends string>({
   options,
@@ -245,8 +244,7 @@ export function ColorSwatches({
 }
 
 /**
- * A fact on a view card: an icon and a line of text. The event, task, habit
- * and dream cards all show their details as these rows now.
+ * A fact on a view card: an icon and a line of text.
  */
 export function DetailRow({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (

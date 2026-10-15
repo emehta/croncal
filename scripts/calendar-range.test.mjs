@@ -42,10 +42,10 @@ check("a week window ends six days on", key(week.end), "2026-9-29");
 check("the window starts at midnight", week.start.getHours(), 0);
 check("a window of one is one day", key(dayWindow(d(2026, 9, 26, 18), 1).end), "2026-9-26");
 
-check("the label is the days on screen", formatWindowLabel(week), "Wednesday 23rd to Tuesday 29th");
+check("the label is the days on screen", formatWindowLabel(week), "Wed 23 to Tue 29 Sep");
 check("a label across a month names the far month",
-  formatWindowLabel(dayWindow(d(2026, 9, 28), 7)), "Monday 28th to Sunday, October 4th");
-check("a one-day label", formatWindowLabel(dayWindow(d(2026, 9, 26), 1)), "Saturday, September 26th");
+  formatWindowLabel(dayWindow(d(2026, 9, 28), 7)), "Mon 28 Sep to Sun 4 Oct");
+check("a one-day label", formatWindowLabel(dayWindow(d(2026, 9, 26), 1)), "Sat 26 Sep");
 check("the phone label", formatWindowLabelShort(week), "23 to 29 Sep");
 check("the phone label across a month", formatWindowLabelShort(dayWindow(d(2026, 9, 28), 7)), "28 Sep to 4 Oct");
 check("no dashes of any kind in a label",

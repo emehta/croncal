@@ -8,10 +8,9 @@
  * ink where they are light. 4.5:1 or better in every theme
  * (`npm test -- themes`).
  *
- * Here and not in globals.css, as with PriorityWash.module.css: the deploy
- * that first used these as theme variables was served against a globals.css
- * chunk built before it (11 Oct 2026), and a module ships with the component
- * that imports it. The fallbacks are Light's red, which carries white in
+ * Here and not in globals.css: a stylesheet can arrive older than the page
+ * that uses it, and a module ships with the component that imports it. The
+ * fallbacks are Light's red, which carries white in
  * every theme.
  */
 

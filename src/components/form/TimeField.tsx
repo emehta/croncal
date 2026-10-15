@@ -16,7 +16,7 @@ export function formatFieldTime(value: string, format: TimeFormatPref): string {
  * The day in quarter hours, with a box above it to type any time into.
  *
  * Its own component so it can sit inside a popover (TimeField) or inline in
- * another one (the task date picker), where a second popover would count as a
+ * another one (a date picker), where a second popover would count as a
  * click outside the first and close it.
  */
 export function TimeList({

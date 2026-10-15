@@ -1,6 +1,6 @@
 import type { CalendarEvent } from "@/types/calendar-event";
 import { getTimeZoneParts, makeUtcDateFromParts, zonedDateTimeToUtc } from "@/lib/calendar-timezone";
-import { DAY_NAMES, MONTH_NAMES, ordinal } from "@/lib/date-utils";
+import { DAY_NAMES, MONTH_NAMES, ordinal, shiftDateStrByMonths } from "@/lib/date-utils";
 import { DEFAULT_ZONE } from "@/lib/google-recurrence";
 
 type RecurrenceOccurrence = { start: Date; end: Date };
@@ -73,15 +73,13 @@ export function expandRecurrences(
    * The cursor seeds at the event's own start and steps one interval at a
    * time, so reaching the window costs one iteration per interval in between.
    * Against MAX that is not a truncation, it is a disappearance: a daily event
-   * created more than MAX days ago spent its entire budget travelling and
-   * returned nothing at all, so the event simply stopped being on the
-   * calendar. Measured before this: a daily event seeded 31 Jan 2019 produced
-   * zero occurrences for any window in 2026.
+   * created more than MAX days ago would spend its entire budget travelling
+   * and return nothing at all.
    *
    * Skipping whole intervals is what keeps this exact. Every step is a fixed
    * number of days (or of months, re-clamped from seedDayOfMonth every time,
    * so advanceMonth(n) lands where n separate calls would), and the arithmetic
-   * happens in the same naive wall-clock space `advance` uses — so a skipped
+   * happens in the same naive wall-clock space `advance` uses, so a skipped
    * occurrence is one the loop would have computed and discarded anyway.
    */
   function skipTowardRange() {
@@ -191,7 +189,7 @@ export function expandRecurrences(
   if (stoppedInRange && iterations >= MAX) {
     console.warn(
       `expandRecurrences: hit ${MAX}-iteration cap for ${event.id ? `event ${event.id}` : "event"} ` +
-        `(recurrence: ${event.recurrence}) within range ${rangeStart.toISOString()} – ${rangeEnd.toISOString()}; ` +
+        `(recurrence: ${event.recurrence}) within range ${rangeStart.toISOString()} to ${rangeEnd.toISOString()}; ` +
         "occurrences may be truncated.",
     );
   }
@@ -230,8 +228,25 @@ export function describeRecurrence(
     case "monthly":
       return `Every month on the ${ordinal(dateNum)}`;
     case "yearly":
-      return `Every year on ${monthName} ${dateNum}`;
+      return `Every year on ${dateNum} ${monthName}`;
     default:
       return "";
   }
+}
+
+/**
+ * The next three days a repeat lands on, from the expander that draws the
+ * calendar. Google skips a month with no such day (the 31st, 29 February);
+ * CronCal's own series take that month's last day instead.
+ */
+export function nextRepeatDays(recurrence: NonNullable<CalendarEvent["recurrence"]>, startDateStr: string, google: boolean): string[] {
+  const start = `${startDateStr}T12:00:00.000Z`;
+  // Far enough for three: a 29 February every four years, a 31st in seven months of twelve.
+  const months = recurrence === "yearly" ? 160 : recurrence === "monthly" ? 24 : 2;
+  const series = { start_time: start, end_time: start, timezone: "UTC", recurrence, recurrence_until: null, recurrence_exceptions: [] } as unknown as CalendarEvent;
+  const skipsShortMonths = google && (recurrence === "monthly" || recurrence === "yearly");
+  return expandRecurrences(series, new Date(start), new Date(`${shiftDateStrByMonths(startDateStr, months)}T23:59:59.000Z`))
+    .map((occurrence) => occurrence.start.toISOString().slice(0, 10))
+    .filter((day) => day !== startDateStr && (!skipsShortMonths || day.slice(8) === startDateStr.slice(8)))
+    .slice(0, 3);
 }

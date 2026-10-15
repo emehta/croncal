@@ -7,8 +7,7 @@ import { DEFAULT_ZONE } from "@/lib/google-recurrence";
  * Reading events out of Google Calendar.
  *
  * Kept out of the route handler so the paging and the mapping can be exercised
- * against a stubbed Google without standing up auth, which is how the bug
- * below was reproduced and how the fix was checked.
+ * against a stubbed Google without standing up auth.
  */
 
 const GOOGLE_COLOR_MAP: Record<string, string> = {
@@ -29,7 +28,7 @@ const DEFAULT_GOOGLE_COLOR = "#4285F4";
 /**
  * Google's colour id for one of its eleven colours, or null for any other.
  * The event form offers only these eleven, because they are all a Google
- * event can carry; a colour picked there used to go nowhere at all.
+ * event can carry.
  */
 export function googleColorId(hex: string | null | undefined): string | null {
   if (!hex) return null;
@@ -61,14 +60,12 @@ function oneOf<T extends string>(values: readonly T[], value: string | undefined
 /**
  * events.list will not return more than 2500 on a page, and defaults to 250.
  *
- * It was left at the default with no paging, which silently truncated the
- * answer: the calendar asks for three whole months, and `orderBy=startTime`
- * means the 250 it does return are the *earliest* 250. On a schedule with a
- * dozen or more entries a day that budget is spent inside the first fortnight
- * of the window — which begins on the 1st of the previous month — so the week
- * actually on screen came back empty and the calendar looked like it had no
- * Google events at all. Nothing errored; the response was a perfectly valid
- * 200 describing the wrong fortnight.
+ * Left at the default with no paging, it silently truncates the answer: the
+ * calendar asks for three whole months, and `orderBy=startTime` means the 250
+ * it returns are the *earliest* 250. On a schedule with a dozen or more
+ * entries a day that budget is spent inside the first fortnight of the
+ * window, so the week actually on screen would come back empty, in a
+ * perfectly valid 200.
  */
 const GOOGLE_PAGE_SIZE = 2500;
 
@@ -222,8 +219,7 @@ export async function fetchGoogleCalendarEvents(
       const errorText = await response.text();
       /*
        * A 401 is a token Google no longer accepts, revoked or invalid, which
-       * like a missing scope only a reconnect fixes. The events route used to
-       * learn that from a tokeninfo call before every fetch.
+       * like a missing scope only a reconnect fixes.
        */
       const reconnect = response.status === 401 || isScopeError(errorText);
       throw new GoogleCalendarError(reconnect ? "scope" : "upstream", errorText);

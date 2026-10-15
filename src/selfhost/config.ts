@@ -9,9 +9,8 @@ import { SetupError } from "@/selfhost/server";
  *
  * A copy on the web (Vercel) is given it as environment variables. A copy on
  * someone's own computer gets it from the setup screen, which saves it to a
- * file in the computer's app-data folder: outside this folder, because
- * Publik's installer checks out a clean copy of the repo and an update must
- * not lose it. It is read on every request (cached by the file's time), so a
+ * file in the computer's app-data folder: outside this folder, because an
+ * update replaces the folder and must not lose it. It is read on every request (cached by the file's time), so a
  * project connected after the build works with no restart.
  *
  * Environment variables are read by a computed name: Next writes a literal

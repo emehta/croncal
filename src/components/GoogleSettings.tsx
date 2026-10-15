@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowSquareOut, Check, Copy, GoogleLogo } from "@phosphor-icons/react";
 import { SettingsRow, settingsNote } from "@/components/SettingsControls";
 import StatusBanner from "@/components/StatusBanner";
+import Tooltip from "@/components/Tooltip";
 import { DialogButton } from "@/components/form/Dialog";
 import { TextField } from "@/components/form/fields";
 import { authedFetch } from "@/lib/authed-fetch";
@@ -14,8 +15,8 @@ import type { GoogleStatusPayload } from "@/app/api/auth/google/status/route";
 /**
  * Google Calendar's part of Settings. CronCal connects through the owner's
  * own Google Cloud client, so there is no app of anyone else's in between:
- * first its ID and secret (with the redirect URI to give Google), then
- * Connect, then who is connected and Disconnect.
+ * the steps to make one, its ID and secret, then Connect, then who is
+ * connected and Disconnect.
  */
 
 interface ClientStatus {
@@ -25,19 +26,24 @@ interface ClientStatus {
   redirectUri: string;
 }
 
+type Pending = "load" | "save" | "connect" | "disconnect" | "remove" | null;
+
 async function readJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authedFetch(path, init);
   const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!response.ok || !body) throw new Error(body?.error ?? `That didn't work (${response.status}).`);
+  if (!response.ok || !body) throw new Error(body?.error ?? `Could not reach CronCal (${response.status}).`);
   return body;
 }
 
+const json = { "content-type": "application/json" };
 const putClient = (body: Record<string, unknown>) =>
-  readJson<ClientStatus>("/api/google/client", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  readJson<ClientStatus>("/api/google/client", { method: "PUT", headers: json, body: JSON.stringify(body) });
+
+const COPIED_FOR_MS = 2000;
 
 function Link({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--c-accent)", fontWeight: 600, fontSize: "var(--ui-type-label)" }}>
+    <a href={href} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--c-accent)", fontWeight: 600 }}>
       {children}
       <ArrowSquareOut size={13} weight="bold" aria-hidden="true" />
     </a>
@@ -51,118 +57,193 @@ export default function GoogleSettings() {
   const [google, setGoogle] = useState<GoogleStatusPayload | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Pending>("load");
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyRefused, setCopyRefused] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const redirectRef = useRef<HTMLElement>(null);
+  const busy = pending !== null;
 
   const load = useCallback(async () => {
-    const [nextClient, nextGoogle] = await Promise.all([
-      readJson<ClientStatus>("/api/google/client"),
-      readJson<GoogleStatusPayload>("/api/auth/google/status"),
-    ]);
-    setClient(nextClient);
-    setGoogle(nextGoogle);
+    setPending("load");
+    setError(null);
+    try {
+      // Each on its own: a status check that fails still leaves the client form.
+      const nextClient = await readJson<ClientStatus>("/api/google/client");
+      setClient(nextClient);
+      setGoogle(await readJson<GoogleStatusPayload>("/api/auth/google/status"));
+    } catch (failure) {
+      setError(getErrorMessage(failure, "Could not load Google Calendar's settings."));
+    } finally {
+      setPending(null);
+    }
   }, []);
 
   useEffect(() => {
-    load().catch((failure: unknown) => setError(getErrorMessage(failure, "Google Calendar's settings didn't load.")));
+    void load();
   }, [load]);
 
-  async function act(task: () => Promise<void>) {
-    setBusy(true);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_FOR_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  async function act(kind: Exclude<Pending, null>, task: () => Promise<void>, { keepBusy = false } = {}) {
+    setPending(kind);
     setError(null);
     try {
       await task();
+      if (!keepBusy) setPending(null);
     } catch (failure) {
-      setError(getErrorMessage(failure, "That didn't work. Try again."));
-    } finally {
-      setBusy(false);
+      setError(getErrorMessage(failure, "Could not do that. Try again."));
+      setPending(null);
     }
   }
 
+  // Busy until the browser has left for Google, so the button never comes back to life first.
   const connect = () =>
-    act(async () => {
-      const { url } = await readJson<{ url: string }>("/api/auth/google?connect=true&format=json");
+    act("connect", async () => {
+      const { url } = await readJson<{ url: string }>("/api/auth/google?connect=true");
       window.location.assign(url);
-    });
+    }, { keepBusy: true });
 
   const disconnect = () =>
-    act(async () => {
+    act("disconnect", async () => {
       // A JSON body, as the guard in front of every write requires (src/proxy.ts).
-      await readJson("/api/auth/google/disconnect", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      await readJson("/api/auth/google/disconnect", { method: "POST", headers: json, body: "{}" });
       announceGoogleChange();
-      await load();
+      setGoogle(await readJson<GoogleStatusPayload>("/api/auth/google/status"));
+    });
+
+  const remove = () =>
+    act("remove", async () => {
+      setClient(await putClient({ remove: true }));
+      setConfirmingRemove(false);
     });
 
   const copyRedirect = () => {
     if (!client) return;
-    void navigator.clipboard.writeText(client.redirectUri).then(() => setCopied(true), () => undefined);
+    setCopyRefused(false);
+    navigator.clipboard.writeText(client.redirectUri).then(
+      () => setCopied(true),
+      () => {
+        // Refused: the address is selected for a copy by hand.
+        const range = document.createRange();
+        if (redirectRef.current) range.selectNodeContents(redirectRef.current);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+        setCopyRefused(true);
+      },
+    );
   };
 
-  if (!client || !google) {
+  if (!client) {
     return (
-      <>
-        <SettingsRow icon={GoogleLogo} label="Google Calendar">
-          <span style={settingsNote}>{error ? "" : "Checking…"}</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 8 }}>
+        <SettingsRow icon={GoogleLogo} label={error ? "Not loaded" : "Checking…"}>
+          {error && (
+            <DialogButton variant="secondary" busy={pending === "load"} disabled={busy} onClick={() => void load()}>
+              {pending === "load" ? "Checking…" : "Try again"}
+            </DialogButton>
+          )}
         </SettingsRow>
-        {error && <StatusBanner message={error} style={{ marginBottom: 8 }} />}
-      </>
+        {error && <StatusBanner message={error} />}
+      </div>
     );
   }
 
+  const connected = google?.connected === true;
+  const label = connected
+    ? google?.googleEmail ?? "Connected"
+    : !client.saved
+      ? "Not set up"
+      : google?.needsReconnect
+        ? "Connection ended"
+        : "Not connected";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 8 }}>
-      {google.connected ? (
-        <SettingsRow icon={GoogleLogo} label={google.googleEmail ?? "Connected"}>
-          <DialogButton variant="ghost" busy={busy} disabled={busy} onClick={() => void disconnect()}>Disconnect</DialogButton>
-        </SettingsRow>
-      ) : client.saved ? (
-        <SettingsRow icon={GoogleLogo} label="Google Calendar">
-          <DialogButton variant="primary" busy={busy} disabled={busy} onClick={() => void connect()}>
-            {google.needsReconnect ? "Reconnect" : "Connect"}
+      <SettingsRow icon={GoogleLogo} label={label}>
+        {connected ? (
+          <DialogButton variant="ghost" busy={pending === "disconnect"} disabled={busy} onClick={() => void disconnect()}>
+            {pending === "disconnect" ? "Disconnecting…" : "Disconnect"}
           </DialogButton>
-        </SettingsRow>
-      ) : (
-        <SettingsRow icon={GoogleLogo} label="Google Calendar">
-          <Link href="https://console.cloud.google.com/apis/credentials">Open Google Cloud</Link>
-        </SettingsRow>
-      )}
+        ) : client.saved && google ? (
+          <DialogButton variant="primary" busy={pending === "connect"} disabled={busy} onClick={() => void connect()}>
+            {pending === "connect" ? "Opening Google…" : google.needsReconnect ? "Reconnect" : "Connect"}
+          </DialogButton>
+        ) : client.saved ? (
+          <DialogButton variant="secondary" busy={pending === "load"} disabled={busy} onClick={() => void load()}>
+            {pending === "load" ? "Checking…" : "Try again"}
+          </DialogButton>
+        ) : null}
+      </SettingsRow>
 
       {!client.saved && (
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void act(async () => {
+            void act("save", async () => {
               setClient(await putClient({ clientId, clientSecret }));
               setClientId("");
               setClientSecret("");
+              setGoogle(await readJson<GoogleStatusPayload>("/api/auth/google/status"));
             });
           }}
           style={{ display: "flex", flexDirection: "column", gap: 8 }}
         >
-          <p style={settingsNote}>Paste your Google Cloud client&apos;s ID and secret. Give Google this redirect URI:</p>
-          <div style={row}>
-            <code style={{ ...settingsNote, color: "var(--c-text-2)", overflowWrap: "anywhere" }}>{client.redirectUri}</code>
-            <DialogButton variant="ghost" onClick={copyRedirect} aria-label="Copy the redirect URI">
-              {copied ? <Check size={15} weight="bold" aria-hidden="true" /> : <Copy size={15} weight="bold" aria-hidden="true" />}
-            </DialogButton>
-          </div>
+          <ol style={{ ...settingsNote, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18, listStyle: "decimal" }}>
+            <li>Turn on the Google Calendar API. <Link href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com">Open it</Link></li>
+            <li>In Google Auth platform, choose External, then press Publish app. <Link href="https://console.cloud.google.com/auth/audience">Open Audience</Link></li>
+            <li>
+              Make a Web application client with this redirect URI. <Link href="https://console.cloud.google.com/auth/clients">Open Clients</Link>
+              <span style={{ ...row, marginTop: 4 }}>
+                <code ref={redirectRef} style={{ color: "var(--c-text-2)", overflowWrap: "anywhere" }}>{client.redirectUri}</code>
+                <Tooltip label={copied ? "Copied" : "Copy"}>
+                  <DialogButton variant="ghost" onClick={copyRedirect} aria-label="Copy the redirect URI">
+                    {copied ? <Check size={15} weight="bold" aria-hidden="true" /> : <Copy size={15} weight="bold" aria-hidden="true" />}
+                  </DialogButton>
+                </Tooltip>
+              </span>
+              {copyRefused && <span style={{ display: "block" }}>Your browser didn&apos;t allow copying. The address is selected: copy it by hand.</span>}
+            </li>
+            <li>Paste its ID and secret.</li>
+          </ol>
           <TextField aria-label="Client ID" value={clientId} onChange={(event) => { setClientId(event.target.value); setError(null); }} placeholder="Client ID" autoComplete="off" spellCheck={false} />
           <div style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
               <TextField aria-label="Client secret" type="password" value={clientSecret} onChange={(event) => { setClientSecret(event.target.value); setError(null); }} placeholder="Client secret" autoComplete="off" spellCheck={false} />
             </div>
-            <DialogButton type="submit" variant="primary" busy={busy} disabled={busy || !clientId.trim() || !clientSecret.trim()}>
-              {busy ? "Saving…" : "Save"}
+            <DialogButton type="submit" variant="primary" busy={pending === "save"} disabled={busy || !clientId.trim() || !clientSecret.trim()}>
+              {pending === "save" ? "Saving…" : "Save"}
             </DialogButton>
           </div>
         </form>
       )}
 
-      {client.saved && !google.connected && !client.fromEnvironment && (
+      {client.saved && !connected && (
+        <p style={settingsNote}>Google will say it hasn&apos;t verified the app: it&apos;s your own. Press Advanced, then go on to CronCal.</p>
+      )}
+
+      {client.saved && !connected && !client.fromEnvironment && (
         <div style={row}>
           <span style={{ ...settingsNote, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{client.clientId}</span>
-          <DialogButton variant="ghost" disabled={busy} onClick={() => void act(async () => setClient(await putClient({ remove: true })))}>Change</DialogButton>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <DialogButton
+              variant="danger"
+              armed={confirmingRemove}
+              busy={pending === "remove"}
+              disabled={busy}
+              onClick={() => (confirmingRemove ? void remove() : setConfirmingRemove(true))}
+            >
+              {pending === "remove" ? "Removing…" : confirmingRemove ? "Confirm remove" : "Remove"}
+            </DialogButton>
+            {confirmingRemove && pending !== "remove" && (
+              <DialogButton variant="ghost" onClick={() => setConfirmingRemove(false)}>Keep</DialogButton>
+            )}
+          </div>
         </div>
       )}
 

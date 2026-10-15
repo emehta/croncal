@@ -7,14 +7,11 @@ import { useTimeFormat, formatTime, formatHour } from "@/lib/time-format";
 import { getWeekRange, useWeekStart } from "@/lib/week-start";
 import { DAYS_SHORT, addDays, isToday, startOfDay, toDateStr } from "@/lib/date-utils";
 import { Plus } from "@phosphor-icons/react";
-import { DOCK_ROOM, eventFill, eventInk, priorityFill, priorityLine } from "@/lib/styles";
+import { DOCK_ROOM, eventFill, eventInk } from "@/lib/styles";
 import { usePhone } from "@/lib/use-viewport-width";
 import { tapSelection } from "@/lib/touch-gestures";
 import { dragColumn, dragStartMinute, movedTimes } from "@/lib/event-drag";
 import eventStyles from "./CalendarEvents.module.css";
-import wash from "@/components/tasks/PriorityWash.module.css";
-import { openTasksByDay } from "@/lib/task-order";
-import { PRIORITY_COLORS, type CalendarTask, type Priority } from "@/types/task";
 import {
   enumerateDays,
   getClippedOccurrenceForDay,
@@ -30,7 +27,6 @@ interface TimeGridProps {
   view: "day" | "week";
   currentDate: Date;
   events: CalendarEvent[];
-  tasks?: CalendarTask[];
   /** The occurrence selected (lib/calendar-selection's key), drawn solid. */
   selectedKey: string | null;
   /** A press selected an occurrence, or a press away put the selection down (null). */
@@ -63,7 +59,7 @@ const INITIAL_DAY_BUFFER = 21;
 
 /*
  * Extension runs while a scroll is still in flight, and every extension
- * resizes the scroll content — which is an opportunity for the browser to
+ * resizes the scroll content, which is an opportunity for the browser to
  * interrupt the gesture. A long lookahead in large steps means it happens
  * rarely, and never right at the edge where the strip would run out.
  */
@@ -73,7 +69,7 @@ const EDGE_EXTENSION_DAYS = 14;
 /*
  * Left alone the strip only grows, so a session spent scrolling ends up
  * rendering hundreds of day columns and gets slower the longer it is used.
- * Past this it is rebuilt around wherever you are — but only while the scroll
+ * Past this it is rebuilt around wherever you are, but only while the scroll
  * is idle, because rebuilding under a moving gesture is what stops it dead.
  */
 const MAX_STRIP_DAYS = 77;
@@ -83,9 +79,9 @@ const MAX_STRIP_DAYS = 77;
  *
  * Only the last SETTLE_THRESHOLD_RATIO of a column pulls; stop anywhere else
  * and the position is kept exactly as you left it, so most of a drag is free.
- * This replaces CSS scroll-snap, whose proximity threshold is not tunable:
- * Chrome was pulling from two fifths of a column away, about a second after
- * the gesture ended, in a single unanimated jump.
+ * This stands in for CSS scroll-snap, whose proximity threshold is not
+ * tunable: Chrome pulls from two fifths of a column away, about a second
+ * after the gesture ends, in a single unanimated jump.
  */
 const SETTLE_THRESHOLD_RATIO = 0.18;
 
@@ -96,10 +92,9 @@ const DRAG_THRESHOLD_PX = 5;
  * The selection, while it is being dragged and once it has been let go.
  *
  * Both states share it so they cannot drift apart. The label is centred and
- * the box clips: it used to be pinned to the bottom edge with no clipping, so
- * on a short selection "New event" hung outside the dashed box entirely. The
- * border is one pixel, not two — at two it read as a heavy block rather than
- * a provisional marquee.
+ * the box clips, so on a short selection "New event" never hangs outside the
+ * dashed box. The border is one pixel, not two: at two it reads as a heavy
+ * block rather than a provisional marquee.
  */
 const SELECTION_BOX: React.CSSProperties = {
   position: "absolute",
@@ -139,7 +134,7 @@ const HOUR_LINE_BACKGROUND =
 
 /**
  * The half-hour rule. A gradient gives the line; a horizontally repeating
- * mask cuts it into dashes, which is what the old `1px dashed` border drew.
+ * mask cuts it into dashes, as a `1px dashed` border would.
  */
 const HALF_HOUR_DASH_MASK = "repeating-linear-gradient(to right, #000 0 3px, transparent 3px 6px)";
 const halfHourRuleStyle: React.CSSProperties = {
@@ -157,19 +152,10 @@ const GUTTER_WIDTH = 56;
    columns of a phone's week, which have none to spare. */
 const GUTTER_WIDTH_PHONE = 44;
 /*
- * Below this a column cannot hold "TUE 22" on one line or a task's title in
- * a pill, which is every column of a phone's week view (about 43px).
+ * Below this a column cannot hold "TUE 22" on one line, which is every
+ * column of a phone's week view (about 43px).
  */
 const NARROW_COLUMN_WIDTH = 64;
-const TASK_ROW_MIN_HEIGHT = 34;
-/* The pills a day shows before the rest fold into "+N more". */
-const MAX_VISIBLE_TASKS = 4;
-const NO_TASKS: CalendarTask[] = [];
-
-/* A task's colour, as on /tasks. A priority outside the four is drawn as Low. */
-function taskHue(priority: Priority): string {
-  return PRIORITY_COLORS[priority] ?? PRIORITY_COLORS.low;
-}
 
 function dateToMinutes(date: Date): number {
   return date.getHours() * 60 + date.getMinutes();
@@ -182,7 +168,7 @@ function currentTimeTop(date = new Date()): number {
 /**
  * Scrolls the grid so `top`, a point in the hours, sits in the middle of
  * the hours on screen: the scroller's height less the sticky header over
- * it, and less whatever of it runs under the dock at the foot of the
+ * it, and less whatever of it runs under the foot room at the bottom of the
  * screen. Near either end of the day the browser holds it at the top or the
  * bottom, which is as close to the middle as it gets.
  */
@@ -249,7 +235,6 @@ export default function TimeGrid({
   view,
   currentDate,
   events,
-  tasks,
   selectedKey,
   onEventSelect,
   onEventOpen,
@@ -330,8 +315,6 @@ export default function TimeGrid({
 
   const daysVisible = view === "week" ? 7 : 1;
   const days = useMemo(() => enumerateDays(stripStart, stripEnd), [stripStart, stripEnd]);
-  /* Each day's open tasks, Critical first, so the four shown are the four that matter most. */
-  const tasksByDay = useMemo(() => openTasksByDay(tasks ?? NO_TASKS), [tasks]);
   const daysKey = useMemo(() => days.map((day) => toDateStr(day)).join("|"), [days]);
   const stripWidth = days.length * columnWidth;
   const narrow = phone && columnWidth < NARROW_COLUMN_WIDTH;
@@ -518,11 +501,10 @@ export default function TimeGrid({
       /*
        * Hold the same day against the left edge across a resize.
        *
-       * scrollLeft is a pixel offset, so widening the window silently slid the
-       * strip under it: the columns showed one week while the heading named
-       * another, and nothing corrected it until the next scroll. Recording the
-       * day now lets the repositioning effect below put it back once the new
-       * width has been committed.
+       * scrollLeft is a pixel offset, so widening the window would silently
+       * slide the strip under it: the columns would show one week while the
+       * heading named another. Recording the day here lets the repositioning
+       * effect below put it back once the new width has been committed.
        */
       if (previousWidth > 0 && nextWidth !== previousWidth) {
         const leftDay = daysRef.current[Math.round(el.scrollLeft / previousWidth)];
@@ -556,13 +538,11 @@ export default function TimeGrid({
      * The day this grid just reported, arriving back as a prop. The scroll
      * position that produced it is by definition already correct.
      *
-     * The old guard stored the week *anchor* a scrolled day would produce and
-     * compared that, so it only matched when the effect happened to see the
-     * same render the scroll had queued. Two scroll updates in one frame left
-     * it holding a key the effect never saw, it read that as an external jump,
-     * rebuilt the strip and threw scrollLeft at the first day of the week.
-     * That was the random snap to the next week. Comparing the day against
-     * the day cannot drift like that.
+     * Compared as a day, not as the week *anchor* a scrolled day would
+     * produce: two scroll updates in one frame would leave an anchor the
+     * effect never saw, which it would read as an external jump, rebuilding
+     * the strip and throwing scrollLeft at the first day of the week. The day
+     * against the day cannot drift like that.
      */
     if (!viewChanged && selfEmittedDateKeyRef.current === toDateStr(currentDate)) return;
 
@@ -578,10 +558,9 @@ export default function TimeGrid({
       setStripStart(nextRange.start);
       setStripEnd(nextRange.end);
       /*
-       * The date itself, centred — not the week it belongs to, pinned left.
-       * Pressing Today put today wherever it happened to fall in its week, so
-       * a Tuesday landed third from the left with nothing before it; the day
-       * you asked for should have its neighbours on both sides.
+       * The date itself, centred: not the week it belongs to, pinned left,
+       * which would put a Tuesday third from the left with nothing before it.
+       * The day you asked for should have its neighbours on both sides.
        */
       pendingScrollDateKeyRef.current = toDateStr(currentDate);
       pendingScrollOffsetRef.current = 0;
@@ -617,10 +596,10 @@ export default function TimeGrid({
      * Wait until the width in state is the width on screen.
      *
      * columnWidth starts at a guess and is measured on the first layout pass,
-     * so this effect's first run had the guess. It positioned by it, cleared
-     * the pending key, and every correction afterwards compounded from the
-     * wrong place — a centred day came out three columns off. The key is left
-     * in place, and this runs again when the measurement lands.
+     * so this effect's first run has the guess. Positioning by it and clearing
+     * the pending key would make every correction afterwards compound from
+     * the wrong place. The key is left in place, and this runs again when the
+     * measurement lands.
      */
     const measured = Math.max(1, (el.clientWidth - gutterWidth) / daysVisible);
     if (Math.abs(measured - columnWidth) > 0.5) return;
@@ -651,8 +630,8 @@ export default function TimeGrid({
     pendingScrollAlignRef.current = "start";
     /*
      * The day now against the left edge, which after centring is not the day
-     * that was asked for. Recording the wrong one made the first flick of the
-     * scroll wheel re-report a date that had not changed.
+     * that was asked for. Recording the wrong one would make the first flick
+     * of the scroll wheel re-report a date that had not changed.
      */
     emittedDateKeyRef.current = toDateStr(days[targetIndex] ?? days[index]);
     reportVisibleStart(days[targetIndex] ?? days[index]);
@@ -669,8 +648,7 @@ export default function TimeGrid({
    *
    * Extending only from the scroll handler is one missed event away from a
    * dead end: land exactly on the last column and there is nothing left to
-   * scroll, so no further event fires and the strip cannot grow. The month
-   * view was reachably stuck that way; this is the same mechanism sideways.
+   * scroll, so no further event fires and the strip cannot grow.
    */
   useEffect(() => {
     const el = scrollerRef.current;
@@ -734,10 +712,10 @@ export default function TimeGrid({
   }, []);
 
   /*
-   * Derived from the strip, not from currentDate. currentDate was only ever a
-   * fallback for an empty strip, but naming it as a dependency meant both of
-   * these — and therefore dayRenderData, which expands every recurrence and
-   * lays out every column — were rebuilt on each day scrolled past.
+   * Derived from the strip, not from currentDate, which is only a fallback
+   * for an empty strip: as a dependency it would rebuild both of these, and
+   * so dayRenderData, which expands every recurrence and lays out every
+   * column, on each day scrolled past.
    */
   const rangeStart = useMemo(() => startOfDay(stripStart), [stripStart]);
   const rangeEnd = useMemo(() => {
@@ -749,12 +727,9 @@ export default function TimeGrid({
   /*
    * Every event placed on the days it touches, in one pass.
    *
-   * This used to walk the whole event list once per day: for each of up to 77
-   * days it re-parsed every event's start and end, and for each recurring one
-   * it walked that event's occurrences across the entire strip only to keep
-   * the one day it was looking at. With a few hundred Google instances on
-   * screen that is tens of thousands of Date parses per render, all of it
-   * thrown away. Parsing once and bucketing by day gives the same maps.
+   * Not the whole event list once per day, which with a few hundred Google
+   * instances on screen is tens of thousands of Date parses per render.
+   * Parsing once and bucketing by day gives the same maps.
    */
   const dayRenderData = useMemo(() => {
     const data = new Map<string, DayRenderData>();
@@ -827,14 +802,8 @@ export default function TimeGrid({
    * Where the grid opens vertically: the time now, in the middle of the
    * hours on screen, once for each view.
    *
-   * It opened on the earliest event anywhere on the strip, after a 05:00 to
-   * 11:00 schedule opened on an empty evening (20 Sep 2026). The schedule
-   * fills every day from midnight now, so the earliest event was always at
-   * 00:00 and the grid always opened at the top. The owner asked for now
-   * (5 Oct 2026).
-   *
-   * The header over the hours can grow after the first paint (the day's
-   * tasks arrive, an all-day row appears), which would push the line below
+   * The header over the hours can grow after the first paint (an all-day row
+   * appears), which would push the line below
    * the middle. So the aim is held: taken again whenever the header or the
    * scroller changes height, until the first wheel, touch, press or key on
    * the grid. From then on the position is the reader's.
@@ -870,7 +839,7 @@ export default function TimeGrid({
     if (!scroller) return;
 
     /*
-     * This element owns both axes now, so it fires on vertical scrolling as
+     * This element owns both axes, so it fires on vertical scrolling as
      * well. Only a change in the horizontal position should move the date,
      * extend the strip or arm a settle.
      */
@@ -884,8 +853,8 @@ export default function TimeGrid({
       /*
        * Held for a moment after the last scroll event. Any repositioning that
        * arrives while this is set is deferred, because assigning scrollLeft
-       * under a momentum scroll is what the glitching was: the browser is
-       * mid-animation and the assignment yanks it somewhere else.
+       * under a momentum scroll glitches: the browser is mid-animation and
+       * the assignment yanks it somewhere else.
        */
       userScrollingRef.current = true;
       if (scrollIdleTimerRef.current !== null) clearTimeout(scrollIdleTimerRef.current);
@@ -906,10 +875,10 @@ export default function TimeGrid({
       if (!el || columnWidth <= 0) return;
 
       /*
-       * Rounded, not ceiled from two pixels in. Ceiling flipped the reported
-       * day three pixels into a drag, so the smallest nudge re-rendered the
-       * page and re-keyed the event window; rounding flips at the halfway
-       * mark, which is also the day you are actually looking at.
+       * Rounded, not ceiled from two pixels in. Ceiling would flip the
+       * reported day three pixels into a drag, so the smallest nudge would
+       * re-render the page and re-key the event window; rounding flips at the
+       * halfway mark, which is also the day you are actually looking at.
        */
       const rawIndex = Math.round(el.scrollLeft / columnWidth);
       const maxLeftIndex = Math.max(0, days.length - daysVisible);
@@ -978,10 +947,8 @@ export default function TimeGrid({
 
     /*
      * Measured against the grid's own box, so it does not care where the grid
-     * sits inside the scrolled content. This was the scroller's box plus its
-     * scrollTop minus a leading offset, written out twice and already drifted:
-     * the create-drag left the offset out, so a dragged selection ended
-     * twelve minutes off where it started.
+     * sits inside the scrolled content, and a click and a drag cannot measure
+     * it two ways.
      */
     const gridEl = e.currentTarget as HTMLElement;
     const gridRect = gridEl.getBoundingClientRect();
@@ -1040,13 +1007,10 @@ export default function TimeGrid({
     }
 
     /*
-     * A press is not yet a selection.
-     *
-     * This used to set an hour-long drag on mousedown, so a single click on
-     * empty space left an hour blocked out and a Create event button sitting
-     * on it. Nothing starts until the pointer has actually travelled
-     * DRAG_THRESHOLD_PX, which is what separates a click from a drag; a plain
-     * click now only clears whatever was selected before.
+     * A press is not yet a selection, so a single click on empty space never
+     * leaves an hour blocked out. Nothing starts until the pointer has
+     * actually travelled DRAG_THRESHOLD_PX, which is what separates a click
+     * from a drag; a plain click only clears whatever was selected before.
      */
     setCommittedDrag(null);
     dragStateRef.current = null;
@@ -1097,9 +1061,9 @@ export default function TimeGrid({
   /*
    * Pressing an event and dragging it moves it.
    *
-   * The press stops here, so the grid underneath no longer reads it as the
-   * start of a new-event selection, which is what used to happen: dragging
-   * an event drew a "New event" box instead. Nothing moves until the pointer
+   * The press stops here, so the grid underneath does not read it as the
+   * start of a new-event selection and draw a "New event" box instead.
+   * Nothing moves until the pointer
    * has travelled DRAG_THRESHOLD_PX, so a click still opens the event. Up and
    * down follow the pointer in quarter hours; another day only once the
    * pointer is clearly into its column (lib/event-drag), so the drift of a
@@ -1183,10 +1147,10 @@ export default function TimeGrid({
   }
 
   /*
-   * Saturday and Sunday are tinted down the whole column — header, tasks,
-   * all-day and the grid — so the weekend reads as one band rather than a
-   * shaded grid under an unshaded heading. Weekdays stay untouched in the
-   * three header rows, which is how they already were.
+   * Saturday and Sunday are tinted down the whole column (header, all-day
+   * and the grid), so the weekend reads as one band rather than a shaded
+   * grid under an unshaded heading. Weekdays stay untouched in the header
+   * rows.
    */
   const weekendCellBackground = (day: Date) =>
     isWeekend(day) ? "var(--cal-weekend-bg)" : "transparent";
@@ -1206,12 +1170,7 @@ export default function TimeGrid({
     position: "sticky",
     left: 0,
     zIndex: 12,
-    /*
-     * --c-surface-solid is not declared in any theme, so this read
-     * --page-bg, and the gutter sat a shade darker than the card it is
-     * inside (#1c1c1c against #272727 on Midnight, and a mismatch in the
-     * other three). The card's own colour is the one it wants.
-     */
+    /* The card's own colour, so the gutter is not a shade off the card it is inside. */
     background: "var(--c-surface)",
   };
 
@@ -1250,15 +1209,12 @@ export default function TimeGrid({
       {/*
         * One scroller for both axes, which is what makes the gutters stick.
         *
-        * The hour gutter used to live inside a second, inner scroller that
-        * owned the vertical axis. position: sticky resolves against the
-        * nearest scroll container, so left: 0 resolved against that inner
-        * element — which never scrolls horizontally — and the gutter simply
-        * travelled with the strip. Measured: at scrollLeft 2934 the whole
-        * time-grid body sat at x = -2917, so every hour label was off-screen
-        * the moment you scrolled a single day. Scrolling both axes here means
-        * the gutter sticks left and the header block sticks top, against the
-        * same scrollport.
+        * position: sticky resolves against the nearest scroll container, so
+        * in a second, inner scroller for the vertical axis, which never
+        * scrolls horizontally, the gutter's left: 0 would travel with the
+        * strip and leave every hour label off-screen. Scrolling both axes
+        * here means the gutter sticks left and the header block sticks top,
+        * against the same scrollport.
         */}
       <div
         ref={scrollerRef}
@@ -1271,8 +1227,8 @@ export default function TimeGrid({
           /*
            * none, not contain. contain stops the scroll chaining to the page
            * but still allows this element its own rubber band, and on a
-           * trackpad that band is what let the grid be dragged past both ends
-           * — the header block travelling down with it, because a sticky box
+           * trackpad that band lets the grid be dragged past both ends, the
+           * header block travelling down with it, because a sticky box
            * follows the scrollport and the scrollport itself is what moves
            * during an overscroll. none removes the affordance entirely, so
            * the top is the top and the bottom is the bottom.
@@ -1280,10 +1236,10 @@ export default function TimeGrid({
           overscrollBehavior: "none",
           scrollbarWidth: "none",
           /*
-           * No scroll-snap here. CSS proximity snapping reads as the glitch it
-           * was reported as: Chrome picks its own threshold — measured pulling
-           * from two fifths of a column away — applies it about a second after
-           * the gesture ends, as one unanimated jump, and re-runs it every
+           * No scroll-snap here. CSS proximity snapping reads as a glitch:
+           * Chrome picks its own threshold (two fifths of a column away),
+           * applies it about a second after the gesture ends, as one
+           * unanimated jump, and re-runs it every
            * time the strip is extended. runSettle does the same job on terms
            * this grid controls.
            */
@@ -1294,13 +1250,13 @@ export default function TimeGrid({
             width: gutterWidth + stripWidth,
             display: "flex",
             flexDirection: "column",
-            /* The grid runs under the dock to the foot of the screen; this
-               lets the last hour still scroll up clear of it. */
+            /* The grid runs over the foot room to the bottom of the screen;
+               this lets the last hour still scroll up clear of it. */
             paddingBottom: DOCK_ROOM,
           }}
         >
           {/*
-            * Day names, tasks and all-day in one sticky block, so only one
+            * Day names and all-day in one sticky block, so only one
             * offset has to be right rather than three stacked ones. It needs
             * an opaque background or the grid scrolls through it.
             */}
@@ -1336,8 +1292,8 @@ export default function TimeGrid({
                     }}
                   >
                     {/*
-                      * Today is a tag around the whole heading — name and
-                      * number together — rather than a disc around the number
+                      * Today is a tag around the whole heading, name and
+                      * number together, rather than a disc around the number
                       * with the name tinted beside it. The wrapper is always
                       * rendered so every column keeps the same geometry and
                       * nothing shifts on the day it becomes today.
@@ -1382,121 +1338,6 @@ export default function TimeGrid({
             </div>
           </div>
 
-          {/* Tasks row, when the page has tasks to show (CronCal has none of its own). */}
-          {tasks && (
-            <div
-              style={{
-                display: "flex",
-                borderBottom: "1px solid var(--c-border)",
-                flexShrink: 0,
-                minHeight: TASK_ROW_MIN_HEIGHT,
-              }}
-            >
-              <div
-                style={{
-                  ...stickyGutterStyle,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  paddingRight: 8,
-                }}
-              >
-                <span style={{ fontSize: "var(--ui-type-micro)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0, color: "var(--c-text-2)" }}>Tasks</span>
-              </div>
-              <div style={{ display: "flex", width: stripWidth, flexShrink: 0 }}>
-                {days.map((day) => {
-                  const dayStr = toDateStr(day);
-                  const dayTasks = tasksByDay.get(dayStr) ?? NO_TASKS;
-                  const visible = dayTasks.slice(0, MAX_VISIBLE_TASKS);
-                  const hidden = dayTasks.slice(MAX_VISIBLE_TASKS);
-
-                  return (
-                    <div
-                      key={dayStr}
-                      style={{
-                        width: columnWidth,
-                        flex: "0 0 auto",
-                        minWidth: 0,
-                        background: weekendCellBackground(day),
-                        borderLeft: "1px solid var(--c-border-sub)",
-                        padding: "4px 4px 3px",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 2,
-                        overflow: "hidden",
-                        minHeight: TASK_ROW_MIN_HEIGHT,
-                      }}
-                    >
-                      {/*
-                        * A pill cut to "Fi..." says nothing, so a narrow column
-                        * shows how many tasks are due instead, in the colour of
-                        * the most important of them. Day view has the room for
-                        * the titles.
-                        */}
-                      {narrow && dayTasks.length > 0 && (
-                        <div
-                          role="img"
-                          aria-label={`${dayTasks.length} ${dayTasks.length === 1 ? "task" : "tasks"} due: ${dayTasks.map((t) => t.title).join(", ")}`}
-                          title={dayTasks.map((t) => t.title).join("\n")}
-                          className={wash.wash}
-                          style={{
-                            fontSize: "var(--ui-type-micro)",
-                            padding: "1px 0",
-                            borderRadius: "var(--ui-radius-round)",
-                            background: priorityFill(taskHue(dayTasks[0].priority)),
-                            border: `1px solid ${priorityLine(taskHue(dayTasks[0].priority))}`,
-                            color: "var(--c-text-1)",
-                            fontWeight: 600,
-                            lineHeight: "16px",
-                            textAlign: "center",
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          {dayTasks.length}
-                        </div>
-                      )}
-                      {/*
-                        * Each pill in its priority's colour, the fill and edge
-                        * of the task's row on /tasks.
-                        */}
-                      {!narrow && visible.map((task) => (
-                        <div
-                          key={task.id}
-                          title={task.title}
-                          className={wash.wash}
-                          style={{
-                            fontSize: "var(--ui-type-micro)",
-                            padding: "1px 6px",
-                            borderRadius: "var(--ui-radius-round)",
-                            background: priorityFill(taskHue(task.priority)),
-                            border: `1px solid ${priorityLine(taskHue(task.priority))}`,
-                            color: "var(--c-text-1)",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            fontWeight: 600,
-                            lineHeight: "16px",
-                            width: "100%",
-                            boxSizing: "border-box",
-                          }}
-                        >
-                          {task.title}
-                        </div>
-                      ))}
-                      {!narrow && hidden.length > 0 && (
-                        <div
-                          title={hidden.map((t) => t.title).join("\n")}
-                          style={{ fontSize: "var(--ui-type-micro)", color: "var(--c-text-4)", paddingLeft: 4, lineHeight: "14px" }}
-                        >
-                          +{hidden.length} more
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* All-day events row */}
           {hasAllDayEvents && (
@@ -1549,9 +1390,9 @@ export default function TimeGrid({
                           onClick={(e) => pressEvent(e, occ)}
                           onDoubleClick={(e) => doublePressEvent(e, occ)}
                           style={{
-                            /* The same tint and ink as a timed event. It was
-                               the colour on the colour at 73%: orange text on
-                               orange, 1.6:1. Selected, it fills solid. */
+                            /* The same tint and ink as a timed event, not the
+                               colour on the colour (orange text on orange is
+                               1.6:1). Selected, it fills solid. */
                             background: selected ? contentFill(occ.event.color) : eventFill(occ.event.color),
                             borderLeft: `3px solid ${contentColor(occ.event.color)}`,
                             borderTop: "none",
@@ -1583,14 +1424,11 @@ export default function TimeGrid({
           </div>
 
           {/*
-            * Time grid, flush against the header.
-            *
-            * There was a 12px spacer here so the midnight label could sit
-            * centred on its own hour line without clipping. It read as an
-            * unexplained band between the tasks row and the first hour, which
-            * is worse than a label sitting just under its line — midnight is
-            * the one hour whose line is the grid's own top edge, and it is
-            * offset below it for exactly that reason.
+            * Time grid, flush against the header, with no spacer to centre
+            * the midnight label on its line: a band between the header and the
+            * first hour is worse than a label sitting just under its line.
+            * Midnight is the one hour whose line is the grid's own top edge,
+            * and it is offset below it for exactly that reason.
             *
             * The -1px pulls the first hour line onto the header's bottom
             * border so the two do not stack into a 2px rule.
@@ -1623,8 +1461,8 @@ export default function TimeGrid({
                     position: "absolute",
                     top: h === 0 ? 2 : h * HOUR_HEIGHT - 8,
                     /* Centred in the gutter. Right-aligned, "09:00" and
-                       "23:00" sat flush to the grid and read as hanging off
-                       it rather than labelling it. */
+                       "23:00" would sit flush to the grid and read as hanging
+                       off it rather than labelling it. */
                     left: 0,
                     right: 0,
                     textAlign: "center",
@@ -1679,11 +1517,10 @@ export default function TimeGrid({
                       borderLeft: "1px solid var(--c-border-sub)",
                       backgroundColor: weekend ? "var(--cal-weekend-bg)" : "var(--cal-weekday-bg)",
                       /*
-                       * The hour lines are painted, not built. This was 24
-                       * absolutely positioned divs per day, each wrapping a
-                       * second one for the half hour — 2,064 nodes over a
-                       * 43 day strip, 68% of everything the grid rendered,
-                       * all of it recreated whenever the strip changed.
+                       * The hour lines are painted, not built: two divs per
+                       * hour per day would be most of everything the grid
+                       * renders, all of it recreated whenever the strip
+                       * changes.
                        */
                       backgroundImage: HOUR_LINE_BACKGROUND,
                     }}
@@ -1723,7 +1560,7 @@ export default function TimeGrid({
                         <button
                           type="button"
                           className="ui-hover-opacity-soft"
-                          aria-label={`Create event from ${formatTime(slotStart, fmt)} to ${formatTime(slotEnd, fmt)}`}
+                          aria-label={`Add event from ${formatTime(slotStart, fmt)} to ${formatTime(slotEnd, fmt)}`}
                           /* Otherwise pressing it would begin a fresh selection underneath. */
                           onMouseDown={(event) => event.stopPropagation()}
                           onClick={() => {
@@ -1738,7 +1575,7 @@ export default function TimeGrid({
                           }}
                         >
                           <Plus aria-hidden="true" size={13} weight="bold" style={{ flexShrink: 0 }} />
-                          {showLabel && <span>Create event</span>}
+                          {showLabel && <span>Add event</span>}
                         </button>
                       );
                     })()}
@@ -1831,7 +1668,7 @@ export default function TimeGrid({
                             boxShadow: "var(--cal-event-shadow)",
                             /* A finished event is quieter by its fill and its
                                neutral text, never by opacity: at 0.55 its
-                               title fell to 1.9 to 2.5:1. */
+                               title falls to 1.9 to 2.5:1. */
                             borderTop: "none",
                             borderRight: "none",
                             borderBottom: "none",
@@ -1888,8 +1725,8 @@ export default function TimeGrid({
                   {/*
                     * Now, across today: a red rule and its dot, each inside a
                     * border the colour of the grid behind them, so the line
-                    * stays a clean line over whatever event it crosses (the
-                    * owner, 13 Oct 2026: a finished border, not a shadow).
+                    * stays a clean line over whatever event it crosses: a
+                    * finished border, not a shadow.
                     * The border is a ring with no blur, in --c-surface, and on
                     * a weekend with the weekend's shade laid over it, the
                     * same two layers the column itself is drawn in.
@@ -1897,7 +1734,7 @@ export default function TimeGrid({
                   <div
                     style={{
                       position: "absolute",
-                      /* 2px centred where the 1px rule was: half a pixel up. */
+                      /* 2px, centred on the 1px line it marks: half a pixel up. */
                       top: "calc(var(--current-time-offset) - 0.5px)",
                       left: `${todayColIndex * columnWidth}px`,
                       width: columnWidth,

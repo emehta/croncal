@@ -9,14 +9,16 @@ import {
   eventFormTimeZone,
   getBrowserTimeZone,
   shiftInstantToTimeZoneFields,
+  zoneLabel,
+  zoneOffset,
   zonedDateTimeToUtc,
 } from "@/lib/calendar-timezone";
-import type { CalendarEvent, RepeatChoice } from "@/types/calendar-event";
+import { EVENT_PRIORITIES, EVENT_TYPES, type CalendarEvent, type RepeatChoice } from "@/types/calendar-event";
 import { nextHalfHour } from "@/lib/event-start";
 import type { GoogleSeriesRepeat } from "@/lib/calendar-events";
-import { describeRecurrence } from "@/lib/recurrence";
+import { nextRepeatDays } from "@/lib/recurrence";
 import { getErrorMessage, isNetworkError } from "@/lib/error-utils";
-import { DAYS_SHORT, MONTHS_SHORT, addDays, toDateStr } from "@/lib/date-utils";
+import { addDays, toDateStr } from "@/lib/date-utils";
 import { usePhone } from "@/lib/use-viewport-width";
 import { descriptionForEditing } from "@/lib/rich-text";
 import { DeleteAction, DialogButton, DialogCard, DialogFooter } from "@/components/form/Dialog";
@@ -31,7 +33,7 @@ import {
   ToggleRow,
 } from "@/components/form/fields";
 import SelectField from "@/components/form/SelectField";
-import DateField from "@/components/form/DateField";
+import DateField, { formatFieldDate } from "@/components/form/DateField";
 import TimeField from "@/components/form/TimeField";
 import StatusBanner from "@/components/StatusBanner";
 
@@ -52,8 +54,7 @@ interface EventFormPanelProps {
 /*
  * Google's eleven calendar colours, the only ones an event synced with Google
  * can carry, in the order of the spectrum: reds, orange, yellow, greens,
- * blues, purples, then grey. They were in Google's own order, which reads as
- * random (the owner's word, 29 Sep 2026), and were unnamed.
+ * blues, purples, then grey, not Google's own order, which reads as random.
  */
 const EVENT_COLORS = [
   { value: "#D50000", label: "Tomato" },
@@ -77,25 +78,6 @@ const TIMEZONES = [
   "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney",
 ];
 
-/** "GMT+8", for the right of each zone in the list. */
-function zoneOffset(timeZone: string): string {
-  try {
-    const part = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset" })
-      .formatToParts(new Date())
-      .find((entry) => entry.type === "timeZoneName");
-    return part?.value ?? "";
-  } catch {
-    return "";
-  }
-}
-
-/** "America/New_York" as "New York". */
-function zoneLabel(timeZone: string): string {
-  if (timeZone === "UTC") return "UTC";
-  const city = timeZone.split("/").pop() ?? timeZone;
-  return city.replace(/_/g, " ");
-}
-
 const REPEAT_OPTIONS: { value: RepeatChoice; label: string }[] = [
   { value: "none", label: "Does not repeat" },
   { value: "daily", label: "Every day" },
@@ -108,8 +90,8 @@ const REPEAT_OPTIONS: { value: RepeatChoice; label: string }[] = [
 
 /**
  * The repeat the form opens on. A day of a Google series takes its series'
- * (see the calendar page): the days arrive without their rule, which is why
- * every one of them used to read "Does not repeat".
+ * (see the calendar page): the days arrive without their rule, so on their
+ * own every one of them would read "Does not repeat".
  */
 function openingRepeat(
   event: Partial<CalendarEvent> | undefined,
@@ -134,29 +116,6 @@ function getWholeDaySpan(start: Date, end: Date): number {
   return Math.max(0, Math.round((endDay.getTime() - startDay.getTime()) / 86400000));
 }
 
-function getNextOccurrences(recurrence: CalendarEvent["recurrence"], startDate: Date, count: number): Date[] {
-  if (!recurrence) return [];
-  const results: Date[] = [];
-  const cursor = new Date(startDate);
-  let iters = 0;
-  while (results.length < count && iters < 1000) {
-    iters++;
-    cursor.setDate(cursor.getDate() + 1);
-    if (recurrence === "daily") results.push(new Date(cursor));
-    else if (recurrence === "weekdays" && cursor.getDay() >= 1 && cursor.getDay() <= 5) results.push(new Date(cursor));
-    else if (recurrence === "weekly" && cursor.getDay() === startDate.getDay()) results.push(new Date(cursor));
-    else if (recurrence === "biweekly" && Math.round((cursor.getTime() - startDate.getTime()) / 86400000) % 14 === 0) results.push(new Date(cursor));
-    else if (recurrence === "monthly" && cursor.getDate() === startDate.getDate()) results.push(new Date(cursor));
-    else if (recurrence === "yearly" && cursor.getMonth() === startDate.getMonth() && cursor.getDate() === startDate.getDate()) results.push(new Date(cursor));
-  }
-  return results;
-}
-
-
-function formatPreviewDate(d: Date): string {
-  return `${DAYS_SHORT[d.getDay()]}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
-}
-
 export default function EventFormPanel({
   initialEvent,
   existingEvent,
@@ -169,7 +128,7 @@ export default function EventFormPanel({
   const phone = usePhone();
   /*
    * A Google event saves every field here, as Google's own (title, times,
-   * colour) or, for what Google has no field for (importance, type, the
+   * colour) or, for what Google has no field for (priority, type, the
    * link), in the event's private properties. Only colour and repeats behave
    * differently: Google's eleven colours, and a rule read from its series.
    */
@@ -209,8 +168,8 @@ export default function EventFormPanel({
   /*
    * A description from Google arrives as HTML; the field gets clean text.
    * Until it is typed in, the event keeps the description it came with: the
-   * clean text was being saved back on every save, so renaming an invite
-   * replaced its description with one whose links had lost their addresses.
+   * clean text saved back on every save would replace an invite's
+   * description with one whose links had lost their addresses.
    */
   // Lazily: Google's HTML is parsed once, not again on every keystroke in the form.
   const [description, setDescription] = useState(() => descriptionForEditing(existingEvent?.description ?? initialEvent?.description));
@@ -224,17 +183,16 @@ export default function EventFormPanel({
   const [eventType, setEventType] = useState<'work' | 'relaxation' | 'admin' | 'free' | 'personal' | null>(existingEvent?.event_type ?? initialEvent?.event_type ?? null);
   /*
    * Whether the event goes into Google Calendar. On by default for a new
-   * one while Google is connected, since the whole schedule lives there: it
-   * was off, at the foot of the form, so an event added in CronCal stayed in
-   * CronCal and never reached Google, with nothing on screen saying so.
+   * one while Google is connected, since the whole schedule lives there: off,
+   * an event added in CronCal would stay in CronCal and never reach Google,
+   * with nothing on screen saying so.
    *
    * An event already in CronCal alone can be moved in with it, on purpose,
    * but not a repeating one: its skipped and changed days have no Google
    * form the move could carry. The choice is kept apart from the default so
    * the connection check finishing after the form opened still sets it.
    */
-  const canGoToGoogle = !existingEvent
-    || (existingEvent.source !== "google" && !existingEvent.google_event_id && !existingEvent.recurrence);
+  const canGoToGoogle = !existingEvent || (existingEvent.source !== "google" && !existingEvent.recurrence);
   const [syncChoice, setSyncChoice] = useState<boolean | null>(null);
   const syncToGoogle = Boolean(googleConnected) && canGoToGoogle && (syncChoice ?? !existingEvent);
   const [saving, setSaving] = useState(false);
@@ -300,9 +258,10 @@ export default function EventFormPanel({
 
   /* CronCal's own repeat; a custom Google rule is none of the six. */
   const recurrence: CalendarEvent["recurrence"] = repeat === "none" || repeat === "custom" ? null : repeat;
-  const previewDates = recurrence
-    ? getNextOccurrences(recurrence, buildLocalDateTime(startDateStr, startTime), 3)
-    : [];
+  const previewDays = useMemo(
+    () => (recurrence ? nextRepeatDays(recurrence, startDateStr, isGoogleEvent || syncToGoogle) : []),
+    [recurrence, startDateStr, isGoogleEvent, syncToGoogle],
+  );
   const repeatOptions = useMemo(() => {
     const options = REPEAT_OPTIONS.map((option) => ({ value: option.value, label: option.label }));
     if (openingRepeat(existingEvent, seriesRepeat) === "custom") {
@@ -363,8 +322,8 @@ export default function EventFormPanel({
         color,
         importance,
         event_type: eventType,
-        // An event already linked to Google keeps its flag; the switch is not shown for it.
-        sync_to_google: canGoToGoogle ? syncToGoogle : existingEvent?.sync_to_google ?? false,
+        // On: the event goes to Google Calendar instead of staying in CronCal.
+        sync_to_google: syncToGoogle,
       });
     } catch (error) {
       // Google says why it refused, and the reason is worth more than "Try again".
@@ -381,8 +340,8 @@ export default function EventFormPanel({
     setFormError("");
     try {
       await onDelete(existingEvent.id);
-    } catch {
-      setFormError("Could not delete this event. Try again.");
+    } catch (error) {
+      setFormError(getErrorMessage(error, "Could not delete this event. Try again."));
     } finally {
       setDeleting(false);
       // A repeating event asks which days next; cancelled, Delete is back to one press.
@@ -392,8 +351,9 @@ export default function EventFormPanel({
 
   /*
    * The zone list, with the event's own zone and this device's added when the
-   * short list lacks them. A native select given a value it had no option for
-   * showed the first zone instead, so an event in Kuala Lumpur read as UTC.
+   * short list lacks them. A select given a value it has no option for
+   * shows the first zone instead, so an event in Kuala Lumpur would read as
+   * UTC.
    */
   const zoneOptions = useMemo(() => {
     const zones = [...TIMEZONES];
@@ -434,7 +394,7 @@ export default function EventFormPanel({
       <DialogButton variant="secondary" onClick={onCancel} disabled={saving || deleting}>
         Cancel
       </DialogButton>
-      <DialogButton variant="primary" onClick={() => { void handleSave(); }} disabled={deleting} busy={saving}>
+      <DialogButton variant="primary" onClick={() => { void handleSave(); }} disabled={saving || deleting} busy={saving}>
         {saving ? "Saving…" : existingEvent ? "Save" : "Add event"}
       </DialogButton>
     </DialogFooter>
@@ -565,25 +525,21 @@ export default function EventFormPanel({
           </FieldGroup>
         </FieldRow>
 
-        {repeatKnown && recurrence && previewDates.length > 0 && (
+        {repeatKnown && previewDays.length > 0 && (
           <p style={{ fontSize: "var(--ui-type-caption)", color: "var(--c-text-3)", lineHeight: 1.5, marginTop: -8 }}>
-            {describeRecurrence(recurrence, buildLocalDateTime(startDateStr, startTime))}. Next: {previewDates.map((d) => formatPreviewDate(d)).join(", ")}
+            Next: {previewDays.map(formatFieldDate).join(", ")}
           </p>
         )}
 
         <FieldRow phone={phone}>
-          <FieldGroup label="Importance">
+          <FieldGroup label="Priority">
             <ChoiceChips
-              ariaLabel="Importance"
+              ariaLabel="Priority"
               allowNone
               phone={phone}
               value={importance}
               onChange={setImportance}
-              options={[
-                { value: "low", label: "Low", color: "var(--priority-low, #808080)" },
-                { value: "medium", label: "Medium", color: "var(--c-info)" },
-                { value: "high", label: "High", color: "var(--c-danger)" },
-              ]}
+              options={EVENT_PRIORITIES}
             />
           </FieldGroup>
           <FieldGroup label="Type">
@@ -593,13 +549,7 @@ export default function EventFormPanel({
               phone={phone}
               value={eventType}
               onChange={setEventType}
-              options={[
-                { value: "work", label: "Work", color: "#246fe0" },
-                { value: "relaxation", label: "Relaxation", color: "#a855f7" },
-                { value: "admin", label: "Admin", color: "#eb8909" },
-                { value: "free", label: "Free time", color: "#22c55e" },
-                { value: "personal", label: "Personal", color: "#e85c3a" },
-              ]}
+              options={EVENT_TYPES}
             />
           </FieldGroup>
         </FieldRow>

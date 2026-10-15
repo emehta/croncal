@@ -6,12 +6,11 @@ import { SESSION_ERROR_CODE } from "@/lib/session-error";
  * A fetch that carries the app's session, and takes care that the session it
  * carries is actually usable.
  *
- * This used to be four lines: read getSession(), attach the token, send. The
- * token it read could already be spent — Supabase access tokens last an hour
- * and the browser only refreshes them while the tab is in the foreground — so
- * after a few hours the server would answer "Your session is invalid or
- * expired" and the app looked logged out while holding a perfectly good
- * refresh token.
+ * The token getSession() returns can already be spent: Supabase access
+ * tokens last an hour and the browser only refreshes them while the tab is in
+ * the foreground, so sent as read, after a few hours the server would answer
+ * "Your session is invalid or expired" and the app would look logged out
+ * while holding a perfectly good refresh token.
  */
 
 /*
@@ -24,11 +23,11 @@ const REFRESH_MARGIN_MS = 60_000;
 /*
  * One refresh at a time, shared by whoever asks during it.
  *
- * Several of these fire together on a page load — the calendar asks for its
- * Google status while it fetches events — and each used to resolve its own
- * session. Concurrent refreshes spend the same refresh token more than once,
- * which Supabase treats as reuse and answers by ending the session: the exact
- * "logged out while using it" this is meant to stop.
+ * Several of these can fire together on a page load, and each resolving its
+ * own session would refresh at once. Concurrent refreshes spend the same
+ * refresh token more than once, which Supabase treats as reuse and answers by
+ * ending the session: the exact "logged out while using it" this is meant to
+ * stop.
  */
 let pending: Promise<Session | null> | null = null;
 let pendingForced = false;
@@ -45,7 +44,7 @@ async function resolveSession(force: boolean): Promise<Session | null> {
 
   const { data, error } = await supabase.auth.refreshSession();
   if (error) {
-    // A failed refresh is not proof the token is dead — the network may simply
+    // A failed refresh is not proof the token is dead: the network may simply
     // be down. Spend what we have and let the server be the judge.
     return session;
   }
@@ -55,17 +54,14 @@ async function resolveSession(force: boolean): Promise<Session | null> {
 /**
  * At most one refresh in flight, forced or not.
  *
- * The guard here used to be `if (!force && pending)`, which let a *forced*
- * refresh start alongside one already running — and forced is precisely the
- * path that races. Opening Settings mounts two rows that each call an
- * owner-gated endpoint at the same moment; if the access token is stale both
- * get a 401, both force a refresh, and two `refreshSession()` calls spend the
- * same refresh token. Supabase reads that as a stolen token and terminates the
- * whole session, which is the "logged out while using it" this function was
- * written to prevent, coming in through the one door left open.
+ * A forced refresh is precisely the path that races: two calls to an
+ * owner-gated endpoint at the same moment with a stale access token both get
+ * a 401, both force a refresh, and two `refreshSession()` calls would spend
+ * the same refresh token. Supabase reads that as a stolen token and
+ * terminates the whole session.
  *
  * A forced refresh arriving while an unforced one is running is queued behind
- * it rather than run beside it. Sequential refreshes are safe — each spends
+ * it rather than run beside it. Sequential refreshes are safe: each spends
  * the token the previous one returned.
  */
 function currentSession(force = false): Promise<Session | null> {

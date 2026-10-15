@@ -3,9 +3,9 @@
  * higher WCAG contrast against it. Pure, so it can be tested:
  * `npm test -- readable-on`.
  *
- * For marks drawn on a content hue (a tick on a done habit's square), where
- * the hue is fixed and the theme cannot help. A white tick on the Learning
- * habit's yellow was 1.4:1; on the same yellow near-black is 12:1.
+ * For marks drawn on a content hue, where the hue is fixed and the theme
+ * cannot help. White on a bright yellow can be 1.4:1; near-black on the same
+ * yellow is 12:1.
  */
 
 const DARK_INK = "#141414";

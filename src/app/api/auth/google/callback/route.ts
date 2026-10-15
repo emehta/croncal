@@ -9,10 +9,8 @@ import { googleEndpoints } from "@/lib/google-endpoints";
 export const dynamic = "force-dynamic";
 
 /**
- * Why a connection attempt ended where it did.
- *
- * Every failure used to redirect to a bare /calendar, so a refused or expired
- * attempt looked exactly like a successful one: back on the calendar with no
+ * Why a connection attempt ended where it did, so a refused or expired
+ * attempt does not look like a successful one: back on the calendar with no
  * connection and nothing said about it. The calendar page turns these into a
  * sentence.
  */
@@ -21,6 +19,7 @@ type CallbackOutcome =
   | "expired"
   | "denied"
   | "scope_missing"
+  | "client"
   | "failed";
 
 function calendarPath(outcome: CallbackOutcome): string {
@@ -34,6 +33,7 @@ function calendarPath(outcome: CallbackOutcome): string {
  */
 function classifyFailure(error: unknown): CallbackOutcome {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("invalid_client") || message.includes("unauthorized_client")) return "client";
   if (message.includes("permission was not granted")) return "scope_missing";
   if (message.includes("refresh token")) return "denied";
   return "failed";
@@ -80,7 +80,10 @@ async function exchangeGoogleCode(request: NextRequest, code: string, client: Go
   });
 
   if (!tokenRes.ok) {
-    throw new Error("Could not complete the Google Calendar connection.");
+    // Google's own reason, so a wrong secret ("invalid_client") is told apart from a passing failure.
+    const reason = ((await tokenRes.json().catch(() => null)) as { error?: string } | null)?.error ?? `status ${tokenRes.status}`;
+    console.error("Google token exchange failed:", reason);
+    throw new Error(`Could not complete the Google Calendar connection: ${reason}`);
   }
 
   return tokenRes.json() as Promise<{
@@ -156,7 +159,7 @@ export async function GET(request: NextRequest) {
 
   if (!code || !state || !startedCalendarFlow) {
     /*
-     * No code at all is Google reporting a refusal — the user pressed Cancel on
+     * No code at all is Google reporting a refusal: the user pressed Cancel on
      * the consent screen. A missing state or start cookie means the attempt did
      * not begin here, or waited too long.
      */

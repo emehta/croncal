@@ -11,14 +11,14 @@ import { googleEndpoints } from "@/lib/google-endpoints";
 export const dynamic = "force-dynamic";
 
 /**
- * Starts connecting Google Calendar: answers with Google's consent page for
- * the owner's own OAuth client (`?format=json` gives the address to open),
- * and sets the cookies the callback checks. `?connect=true` is required, so a
- * prefetch or a cached redirect never starts one.
+ * Starts connecting Google Calendar: answers with the address of Google's
+ * consent page for the owner's own OAuth client, for the page to open, and
+ * sets the cookies the callback checks. `?connect=true` is required, so a
+ * prefetch never starts one.
  */
 export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get("connect") !== "true") {
-    return NextResponse.json({ error: "Use Connect Google Calendar in Settings." }, { status: 400 });
+    return NextResponse.json({ error: "Connect Google Calendar from Settings." }, { status: 400 });
   }
 
   try {
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       state,
     });
     const url = `${googleEndpoints().authorize}?${params.toString()}`;
-    const response = request.nextUrl.searchParams.get("format") === "json" ? NextResponse.json({ url }) : NextResponse.redirect(url);
+    const response = NextResponse.json({ url });
 
     const cookie = { httpOnly: true, sameSite: "lax" as const, secure: request.nextUrl.protocol === "https:", path: "/", maxAge: 60 * 10 };
     response.cookies.set("croncal_google_oauth_state", state, cookie);

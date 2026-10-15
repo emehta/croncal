@@ -71,9 +71,9 @@ function stripVirtualFields(
   delete payload.source;
   delete payload.google;
   /*
-   * Importance and type go as they are, null included. A null used to be
-   * dropped from the payload, so choosing neither on an event that had one
-   * left the old value in place, and the change never saved.
+   * Importance and type go as they are, null included: dropped from the
+   * payload, a null would leave the old value in place, so choosing neither
+   * on an event that had one would never save.
    */
   return payload;
 }
@@ -100,7 +100,6 @@ export { buildGoogleEventPatch };
 
 export type CalendarMutationResult = {
   event: CalendarEvent;
-  warning?: string;
 };
 
 async function getResponseError(response: Response, fallback: string): Promise<string> {
@@ -145,20 +144,10 @@ export async function fetchCalendarEvents(
   const rangeEvents = (rangeData as CalendarEvent[]) ?? [];
 
   if (recurringError) {
-    if (isAbortError(recurringError)) {
-      throw recurringError;
+    if (!isAbortError(recurringError)) {
+      console.error("fetchCalendarEvents recurring query failed:", normalizeSupabaseError(recurringError));
     }
-    const normalized = normalizeSupabaseError(recurringError);
-    const maybeLegacySchema =
-      normalized.code === "42703" ||
-      normalized.code === "PGRST100" ||
-      `${normalized.message ?? ""} ${normalized.details ?? ""}`.toLowerCase().includes("recurrence");
-
-    if (!maybeLegacySchema) {
-      console.error("fetchCalendarEvents recurring query failed:", normalized);
-    }
-
-    return withSource(rangeEvents);
+    throw recurringError;
   }
 
   const recurringEvents = (recurringData as CalendarEvent[]) ?? [];
@@ -174,8 +163,6 @@ export async function fetchCalendarEvents(
   merged.sort((a, b) => a.start_time.localeCompare(b.start_time));
   return withSource(merged);
 }
-
-export { mergeGoogleEvents } from "@/lib/calendar-merge";
 
 export async function fetchGoogleEvents(
   startDate: string,
@@ -200,10 +187,9 @@ export async function fetchGoogleEvents(
  * Adds an event to Google Calendar, where it then lives, and returns it as
  * the calendar shows it.
  *
- * It used to be a CronCal row with a copy sent to Google, and the copy was
- * never the same event: the repeat, type, importance and link stayed behind,
- * a day of the series changed or deleted in CronCal never reached Google, and
- * a refusal from Google left the row behind as if it were synced. The whole
+ * Not a CronCal row with a copy sent to Google, which is never the same
+ * event: the repeat, type, importance and link would stay behind, and a
+ * refusal from Google would leave the row as if it were synced. The whole
  * schedule lives in Google, so a new event does too, and every edit, drag
  * and deletion of it takes the path every other Google event takes.
  *
@@ -293,7 +279,6 @@ export async function moveCalendarEventToGoogle(
 export async function updateCalendarEvent(
   id: string,
   updates: Partial<Omit<CalendarEvent, "id" | "created_at">>,
-  originalEvent?: CalendarEvent | null,
 ): Promise<CalendarMutationResult> {
   const payload = stripVirtualFields(updates);
 
@@ -309,34 +294,7 @@ export async function updateCalendarEvent(
     throw error;
   }
 
-  const updated = data as CalendarEvent;
-  let warning: string | undefined;
-
-  // Sync to Google if this event has a google_event_id
-  if (updated.google_event_id) {
-    try {
-      const googlePatch = buildGoogleEventPatch(updated, originalEvent);
-      if (Object.keys(googlePatch).length > 0) {
-        const response = await authedFetch("/api/google-calendar/events/update", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            googleEventId: updated.google_event_id,
-            ...googlePatch,
-          }),
-        });
-        if (!response.ok) {
-          const reason = await getResponseError(response, "Google Calendar could not update the event.");
-          warning = `Updated in CronCal, but not in Google Calendar. ${reason}`;
-        }
-      }
-    } catch (err) {
-      console.error("Google sync on update failed:", err);
-      warning = "Updated in CronCal, but not in Google Calendar. Check the connection in Settings and try again.";
-    }
-  }
-
-  return { event: updated, warning };
+  return { event: data as CalendarEvent };
 }
 
 export async function deleteCalendarEvent(
@@ -358,19 +316,6 @@ export async function deleteCalendarEvent(
     }
 
     return;
-  }
-
-  // Delete from Google first if synced
-  if (googleEventId) {
-    const response = await authedFetch("/api/google-calendar/events/delete", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ googleEventId }),
-    });
-    if (!response.ok) {
-      const reason = await getResponseError(response, "Google Calendar could not delete the event.");
-      throw new Error(reason);
-    }
   }
 
   const { error: childDeleteError } = await supabase
@@ -530,7 +475,7 @@ export async function applyRecurringSeriesEdit(
       .delete()
       .eq("recurrence_parent_id", baseEvent.id);
     if (childDeleteError) throw childDeleteError;
-    return updateCalendarEvent(baseEvent.id, { ...updates, recurrence_exceptions: [], recurrence_until: null }, baseEvent);
+    return updateCalendarEvent(baseEvent.id, { ...updates, recurrence_exceptions: [], recurrence_until: null });
   }
 
   const carried = changedRowFields(updates, shown);
@@ -546,10 +491,19 @@ export async function applyRecurringSeriesEdit(
   if (dayTimesChanged(occurrence, baseEvent, updates)) {
     const plan = planSeriesMove(baseEvent, occurrence, updates, overrides);
     seriesUpdates = { ...updates, start_time: plan.start_time, end_time: plan.end_time, recurrence_exceptions: plan.recurrence_exceptions };
-    rowUpdates = plan.overrides.map(({ id, ...place }) => ({ id, fields: { ...carried, ...place } }));
+    /*
+     * A changed day can move into the place another still holds, which the
+     * index of one row per place refuses. Moving later, the last goes first;
+     * moving earlier, the first does.
+     */
+    const later = new Date(plan.start_time).getTime() > new Date(baseEvent.start_time).getTime();
+    const placeMs = (row: { original_occurrence_start: string }) => new Date(row.original_occurrence_start).getTime();
+    rowUpdates = [...plan.overrides]
+      .sort((a, b) => (later ? placeMs(b) - placeMs(a) : placeMs(a) - placeMs(b)))
+      .map(({ id, ...place }) => ({ id, fields: { ...carried, ...place } }));
   }
 
-  const result = await updateCalendarEvent(baseEvent.id, seriesUpdates, baseEvent);
+  const result = await updateCalendarEvent(baseEvent.id, seriesUpdates);
   for (const row of rowUpdates) {
     if (Object.keys(row.fields).length === 0) continue;
     const { error } = await supabase.from("calendar_events").update(row.fields).eq("id", row.id);
@@ -558,6 +512,18 @@ export async function applyRecurringSeriesEdit(
   return result;
 }
 
+/**
+ * A change to a CronCal series from one day on: the series is split there.
+ * The new series takes the day and every one after it, with the days skipped
+ * or changed on their own after it (a changed day keeps its changes, on the
+ * new series' matching day), and the old series ends the day before.
+ *
+ * In that order, so a failure loses nothing: if the new series can't be
+ * made the old one is left whole, and if the old one can't be ended the new
+ * one is taken back out, so no day shows twice. A new rule (weekly to daily)
+ * starts with no skipped or changed days, since its days don't line up with
+ * the old ones. From the first day, the old series has no days left and goes.
+ */
 export async function applyRecurringFollowingEdit(
   baseEvent: CalendarEvent,
   occurrence: { start: Date; end: Date },
@@ -566,50 +532,49 @@ export async function applyRecurringFollowingEdit(
   const occurrenceIso = occurrence.start.toISOString();
   const { before, fromPivot } = splitExceptionStarts(baseEvent.recurrence_exceptions, occurrenceIso);
   const nextTimeZone = updates.timezone ?? baseEvent.timezone;
-  const preserveFutureExceptions = (updates.recurrence ?? baseEvent.recurrence) === baseEvent.recurrence;
-  const nextExceptions = preserveFutureExceptions
-    ? fromPivot.map((value) =>
-      mapOccurrenceStartToTimeZone(value, baseEvent.timezone, nextTimeZone, updates.start_time),
-    )
-    : [];
+  const sameRule = (updates.recurrence ?? baseEvent.recurrence) === baseEvent.recurrence;
+  const onNewSeries = (value: string) => mapOccurrenceStartToTimeZone(value, baseEvent.timezone, nextTimeZone, updates.start_time);
 
-  const { error: baseError } = await supabase
-    .from("calendar_events")
-    .update({
-      recurrence_until: occurrenceIso,
-      recurrence_exceptions: before,
-    })
-    .eq("id", baseEvent.id);
-
-  if (baseError) {
-    throw baseError;
-  }
-
-  const nextSeries: Omit<CalendarEvent, "id" | "created_at"> = {
+  const { event: nextSeries } = await createCalendarEvent({
     ...baseEvent,
     ...updates,
     recurrence: updates.recurrence ?? baseEvent.recurrence,
     recurrence_until: baseEvent.recurrence_until ?? null,
-    recurrence_exceptions: nextExceptions,
+    recurrence_exceptions: sameRule ? fromPivot.map(onNewSeries) : [],
     recurrence_parent_id: null,
     original_occurrence_start: null,
     google_event_id: null,
     sync_to_google: false,
-  };
+  });
 
-  const { warning } = await createCalendarEvent(nextSeries);
-  if (warning) {
-    console.warn(warning);
+  const { error: baseError } = await supabase
+    .from("calendar_events")
+    .update({ recurrence_until: occurrenceIso, recurrence_exceptions: before })
+    .eq("id", baseEvent.id);
+  if (baseError) {
+    await supabase.from("calendar_events").delete().eq("id", nextSeries.id);
+    throw baseError;
   }
 
-  const { error: overrideDeleteError } = await supabase
+  const { data: laterDays, error: readError } = await supabase
     .from("calendar_events")
-    .delete()
+    .select("id, original_occurrence_start")
     .eq("recurrence_parent_id", baseEvent.id)
     .gte("original_occurrence_start", occurrenceIso);
+  if (readError) throw readError;
+  for (const day of (laterDays as { id: string; original_occurrence_start: string }[] | null) ?? []) {
+    const { error } = sameRule
+      ? await supabase
+        .from("calendar_events")
+        .update({ recurrence_parent_id: nextSeries.id, original_occurrence_start: onNewSeries(day.original_occurrence_start) })
+        .eq("id", day.id)
+      : await supabase.from("calendar_events").delete().eq("id", day.id);
+    if (error) throw error;
+  }
 
-  if (overrideDeleteError) {
-    throw overrideDeleteError;
+  if (new Date(baseEvent.start_time).getTime() >= occurrence.start.getTime()) {
+    const { error } = await supabase.from("calendar_events").delete().eq("id", baseEvent.id);
+    if (error) throw error;
   }
 }
 

@@ -3,17 +3,15 @@
  *
  * Its own module, with no "use client", so the root layout can read it too:
  * the pre-paint script there cannot import a module at run time, but the
- * layout can write this list into the script as it renders. It used to keep
- * its own copy of the names by hand, which is the kind of copy that learns
- * about a fifth theme a deploy later than everything else.
+ * layout can write this list into the script as it renders. A copy of the
+ * names kept there by hand would learn about a new theme an update later than
+ * everything else.
  *
  * The order is the order Settings' row runs in, so it has to read as one
- * line: the two bases first (Midnight, Light, the owner's ask), then their
- * alternates in the same dark-then-light order (Onyx the black Midnight,
- * Paper the warm Light), then the coloured themes round the rainbow
- * (Oxblood red, Warm amber, Nature green, Indigo blue, Dusk violet). The
- * owner picked the five new ones on 11 Oct 2026, and called a row grouped by
- * family (Light between Onyx and Indigo) not logical.
+ * line: the two bases first (Midnight, Light), then their alternates in the
+ * same dark-then-light order (Onyx the black Midnight, Paper the warm Light),
+ * then the coloured themes round the rainbow (Oxblood red, Warm amber, Nature
+ * green, Indigo blue, Dusk violet), not grouped by family.
  *
  * Midnight is the absence of `data-theme`, and lives in `:root`; every other
  * theme is a `[data-theme=…]` block in globals.css.

@@ -1,7 +1,7 @@
 /*
  * The days a change to a repeating event is for: a list to choose from, then
  * Confirm. Here rather than in globals.css, so it ships with the picker
- * (CLAUDE.md, Known Pitfalls).
+ * (CONTRIBUTING.md: a stylesheet can arrive older than the page).
  */
 .options {
   display: flex;
@@ -9,7 +9,7 @@
   gap: 8px;
 }
 
-/* A control, so square (DESIGN_LANGUAGE.md, Corners). */
+/* A control, so square (the corner tiers in globals.css). */
 .option {
   display: flex;
   align-items: center;

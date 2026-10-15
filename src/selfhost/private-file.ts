@@ -3,8 +3,8 @@ import path from "node:path";
 import { SetupError } from "@/selfhost/server";
 
 /**
- * The small JSON files only this computer's user may read: the config, the
- * settings and publik's key. Server only.
+ * The small JSON files only this computer's user may read: the config and
+ * the settings, the Google client's secret among them. Server only.
  *
  * Written through a temporary file and a rename, one save at a time per file,
  * so two saves never lose each other and a crash never leaves half a file.

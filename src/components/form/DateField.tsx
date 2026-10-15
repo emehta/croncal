@@ -19,7 +19,7 @@ export interface QuickDate {
 /**
  * "Tue 29 Sep", with the year only when it is not this one: short enough to
  * sit whole beside a time field. The toLocaleDateString form ("Tue, 29 Sept
- * 2026") was cut off at the ellipsis in every card.
+ * 2026") is cut off at the ellipsis.
  */
 export function formatFieldDate(dateStr: string): string {
   const date = fromDateStr(dateStr);
@@ -28,8 +28,8 @@ export function formatFieldDate(dateStr: string): string {
 }
 
 /**
- * A date, drawn as a field that opens a month calendar. Replaces
- * `<input type="date">` on the event, goal and dream cards.
+ * A date, drawn as a field that opens a month calendar, in place of
+ * `<input type="date">`.
  */
 export default function DateField({
   value,

@@ -47,5 +47,5 @@ body:
     attributes:
       label: Installed with
       options:
-        - publik
-        - By hand (git clone)
+        - The download line
+        - With Git

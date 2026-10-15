@@ -2,11 +2,10 @@
  * Where an event dragged on the time grid lands. Pure, so it can be tested:
  * `npm test -- event-drag`.
  *
- * Pressing an event and dragging it used to start a new-event selection
- * underneath it, because the press went straight through to the grid. An
- * event now moves: up and down in its column in quarter hours, and into
- * another day only when the pointer has gone clearly into it, so the drift
- * of a hand moving straight down never hops it a column.
+ * An event pressed and dragged moves, rather than starting a new-event
+ * selection underneath it: up and down in its column in quarter hours, and
+ * into another day only when the pointer has gone clearly into it, so the
+ * drift of a hand moving straight down never hops it a column.
  */
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import CalendarHeader from "@/components/calendar/CalendarHeader";
 import TimeGrid from "@/components/calendar/TimeGrid";
 import MonthGrid from "@/components/calendar/MonthGrid";
@@ -24,15 +24,13 @@ import {
   deleteRecurringOccurrence,
   deleteRecurringFollowing,
   fetchGoogleSeriesRepeat,
-  mergeGoogleEvents,
   type GoogleSeriesRepeat,
   type RecurrenceEditScope,
 } from "@/lib/calendar-events";
 import StatusBanner from "@/components/StatusBanner";
+import { DialogButton } from "@/components/form/Dialog";
 import LoadingState from "@/components/LoadingState";
 import { resolveWeekWindow } from "@/lib/calendar-range";
-import { fromDateStr } from "@/lib/date-utils";
-import { useUrlTarget } from "@/lib/use-url-target";
 import { getErrorMessage, isAbortError } from "@/lib/error-utils";
 import { authedFetch } from "@/lib/authed-fetch";
 import { GOOGLE_CHANGED_EVENT } from "@/lib/open-settings";
@@ -47,12 +45,9 @@ import { eventChanges, scopeOptions } from "@/lib/series-edit";
 /**
  * The window of events to hold in memory for a view.
  *
- * Widened to whole months on purpose. It used to be currentDate plus or minus
- * ten days, and the day grid reports the left-hand day as you scroll, so every
- * single day you dragged past produced a window nobody had fetched: a new
- * cache key, a miss, the events cleared and "Loading calendar" on screen, then
- * a jump when the answer arrived. Measured over sixty days of scrolling, sixty
- * of sixty were misses. The cache could not hit even once.
+ * Whole months on purpose. The day grid reports the left-hand day as you
+ * scroll, so a window slid along by the day would be a new cache key, and a
+ * miss, for every day dragged past.
  *
  * Snapped to month edges, scrolling anywhere inside the current month leaves
  * the key untouched, and crossing into the next one changes it once, to a
@@ -65,10 +60,9 @@ function getDateRange(currentDate: Date): { start: Date; end: Date } {
    * depends only on which month currentDate falls in, so it is identical for
    * every day of that month instead of shifting under each one.
    *
-   * Every view takes the same window. Month view used to take only the month
-   * on screen, which was right while it could jump a month at a time; it
-   * scrolls continuously through them now, so the weeks either side of a
-   * boundary would have come back empty.
+   * Every view takes the same window: month view scrolls continuously
+   * through the months, so the weeks either side of a boundary need theirs
+   * too.
    */
   const start = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
   start.setHours(0, 0, 0, 0);
@@ -86,12 +80,12 @@ type CalendarView = "day" | "week" | "month";
 /**
  * "checking" is a real state, not an absence of one.
  *
- * It used to start at "disconnected", and the sidebar draws nothing for that
- * — so the Google row appeared only once the status round trip came back, well
- * after the rest of the page, shoving the layout as it arrived. The round trip
- * is slow for a reason: it refreshes the token and asks Google whether the
- * calendar scope is still granted, which is two calls out. So the row is drawn
- * from the first paint and fills in, rather than arriving late.
+ * The sidebar draws nothing for "disconnected", so from there the Google row
+ * would appear only once the status round trip came back, well after the
+ * rest of the page, shoving the layout as it arrived. The round trip is slow
+ * for a reason: it refreshes the token and asks Google whether the calendar
+ * scope is still granted, which is two calls out. So the row is drawn from
+ * the first paint and fills in.
  */
 type GoogleCalendarStatus = "checking" | "connected" | "disconnected" | "reconnect";
 
@@ -167,9 +161,9 @@ function buildEventRangeDescriptor(
 /**
  * The date whose window sits next to this one.
  *
- * A month in every view, because that is the size of a window now. Stepping a
- * day or a week landed inside the same month and prefetched the range already
- * on screen, which warmed nothing and left the real neighbour cold.
+ * A month in every view, because that is the size of a window: stepping a
+ * day or a week would land inside the same month and prefetch the range
+ * already on screen, leaving the real neighbour cold.
  */
 function getAdjacentDate(currentDate: Date, direction: -1 | 1): Date {
   const next = new Date(currentDate);
@@ -243,17 +237,17 @@ type CalendarOccurrenceSelection = {
 
 /**
  * Whether an event is one day of a series: one of CronCal's own, or a day of a
- * Google series, which Google sends expanded, each with its own id. A Google
- * day used to be treated as a one-off, so a change to it changed that day
- * alone without asking, and a series could not be changed at all.
+ * Google series, which Google sends expanded, each with its own id. Taken
+ * for a one-off, a change to a Google day would change that day alone
+ * without asking.
  */
 function isRepeating(event: CalendarEvent): boolean {
   return Boolean(event.recurrence) || Boolean(event.google?.seriesId);
 }
 
 /**
- * The day of a series that was clicked, as the grid says. Opened another way
- * (a search link), a Google day is its own and a CronCal series' is its first.
+ * The day of a series that was clicked, as the grid says. Opened without
+ * one, a Google day is its own and a CronCal series' is its first.
  */
 function occurrenceFor(
   event: CalendarEvent,
@@ -271,14 +265,14 @@ function googleScope(event: CalendarEvent, scope: RecurrenceEditScope): Recurren
 /** What a save says when changed days could not follow their series. */
 function notCarriedWarning(count: number): string {
   return count === 1
-    ? "Saved. One day you had changed on its own is not in the series' new pattern, so its own changes could not be kept."
-    : `Saved. ${count} days you had changed on their own are not in the series' new pattern, so their own changes could not be kept.`;
+    ? "Saved. One day you had edited on its own isn't in the new pattern, so its edits were dropped."
+    : `Saved. ${count} days you had edited on their own aren't in the new pattern, so their edits were dropped.`;
 }
 
 /**
  * A save, drag or deletion of a repeating event, waiting on which days it is
- * for. Asked after the fact, once there is a change to apply: the question
- * used to come before the form, when nothing had been changed yet.
+ * for. Asked after the fact, once there is a change to apply, not before the
+ * form, when nothing has been changed yet.
  */
 type ScopeRequest = {
   action: "save" | "delete" | "move";
@@ -326,7 +320,7 @@ type SeriesRepeatState = GoogleSeriesRepeat | "loading" | "failed" | null;
 
 // ─── Component ───────────────────────────────────────────────────────
 
-function CalendarPageInner() {
+export default function CalendarPage() {
   const [view, setView] = useState<CalendarView>("week");
   const phone = usePhone();
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -358,42 +352,18 @@ function CalendarPageInner() {
   const editingSeries = useRef<string | null>(null);
   /*
    * The last known answer, so the first fetch asks Google straight away. From
-   * false, the first load was local only, and Google's events arrived a
-   * status check, a scroll wait and a second local query later.
+   * false, the first load would be local only, and Google's events would
+   * arrive a status check, a scroll wait and a second local query later.
    */
   const [googleConnected, setGoogleConnected] = useState(() => rememberedConnection("google"));
   const [googleStatus, setGoogleStatus] = useState<GoogleCalendarStatus>("checking");
   const [showGoogleEvents, setShowGoogleEvents] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  // A save that worked but has something to say, or a connect that worked: not an error.
+  const [notice, setNotice] = useState<{ tone: "success" | "info"; message: string } | null>(null);
+  const [reconnectingGoogle, setReconnectingGoogle] = useState(false);
+  const [firstLoadError, setFirstLoadError] = useState("");
   const [coldLoadingEvents, setColdLoadingEvents] = useState(true);
-
-  /* ─── deep links from universal search ─── */
-
-  /*
-   * The date moves first, and it has to.
-   *
-   * The calendar only holds a window around the day it is showing, so an
-   * event three months out simply is not in `events` yet. `?date=` is
-   * therefore read without waiting for anything — moving the view is what
-   * causes the fetch that brings `?event=` into range — and the event link
-   * below waits for that fetch to land before it looks for its id.
-   */
-  useUrlTarget("date", true, (value) => {
-    const target = fromDateStr(value);
-    if (Number.isNaN(target.getTime())) return;
-    setView("day");
-    setCurrentDate(target);
-  });
-
-  useUrlTarget("event", !coldLoadingEvents, (id) => {
-    const target = events.find((event) => event.id === id);
-    if (!target) return;
-    setSelectedEvent(target);
-    setSelectedOccurrence(null);
-  });
-
-  /* An empty form needs no data, so it opens straight away. */
-  useUrlTarget("new", true, () => setCreatingEvent({}));
   /* Whether anything has ever been rendered, which decides blank vs stale. */
   const hasLoadedOnceRef = useRef(false);
   const eventAbortRef = useRef<AbortController | null>(null);
@@ -401,10 +371,10 @@ function CalendarPageInner() {
   const googleEventsEnabled = googleConnected && showGoogleEvents;
   /*
    * The window is a function of the month, so the month is what it is built
-   * from. Passing currentDate straight in made a new descriptor object for
-   * every day, which made loadEvents a new function, which re-ran the fetch
-   * effect on every single day scrolled past — aborting the request in flight
-   * each time. The window it produced was identical every time.
+   * from. Passing currentDate straight in would make a new descriptor for
+   * every day, so a new loadEvents, so the fetch effect would re-run on every
+   * day scrolled past, aborting the request in flight each time, for the same
+   * window.
    */
   const rangeMonthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
   const rangeAnchor = useMemo(() => {
@@ -435,15 +405,18 @@ function CalendarPageInner() {
 
       switch (outcome) {
         case "connected":
+          setNotice({ tone: "success", message: "Google Calendar connected." });
           return "";
         case "denied":
-          return "Google Calendar wasn't connected: permission was declined. Try again and allow calendar access.";
+          return "Could not connect Google Calendar: access was declined. Connect again in Settings and allow calendar access.";
         case "scope_missing":
-          return "Google Calendar wasn't connected: calendar access wasn't ticked. Try again and tick it.";
+          return "Could not connect Google Calendar: calendar access wasn't ticked. Connect again in Settings and tick it.";
+        case "client":
+          return "Google refused the client. Check its ID and secret in Settings, under Google Calendar.";
         case "expired":
-          return "That connection attempt timed out. Start it again from Settings.";
+          return "The connection took too long. Connect again in Settings.";
         default:
-          return "Google would not complete the connection. Try again in a moment.";
+          return "Could not finish connecting to Google. Try again from Settings in a moment.";
       }
     }
 
@@ -473,7 +446,7 @@ function CalendarPageInner() {
         setGoogleStatus("disconnected");
         /*
          * Do not bury the reason a connection attempt just failed under a
-         * generic "could not verify" — the specific one is the useful one, and
+         * generic "could not verify": the specific one is the useful one, and
          * a failed attempt usually makes the status check fail too.
          */
         if (!outcomeMessage) {
@@ -497,7 +470,7 @@ function CalendarPageInner() {
   ): Promise<CalendarEvent[]> => {
     /*
      * Both requests start together. They are independent, and asking Google
-     * only once the local query had answered put one round trip after the
+     * only once the local query answered would put one round trip after the
      * other on every load. The catch only keeps an early local failure from
      * leaving this promise unhandled; it is awaited, errors and all, below.
      */
@@ -518,16 +491,14 @@ function CalendarPageInner() {
     }
 
     /*
-     * Nothing is drawn until Google has answered too: the two arrive as one.
-     * CronCal's own events used to be drawn as soon as they came back, so on
-     * opening the calendar a CronCal event sat alone in an empty week and the
-     * schedule appeared around it a moment later (the owner, 5 Oct 2026).
-     * Both requests are already in flight, so this costs no time: the grid
+     * Nothing is drawn until Google has answered too: the two arrive as one,
+     * so a CronCal event never sits alone in an empty week while the schedule
+     * appears around it a moment later. Both requests are already in flight, so this costs no time: the grid
      * fills when Google's events would have arrived anyway.
      */
     try {
       const googleEvents = await googleRequest;
-      const merged = mergeGoogleEvents(localEvents, googleEvents);
+      const merged = [...localEvents, ...googleEvents];
       setEventCache(range.view, range.startIso, range.endIso, true, merged);
       return merged;
     } catch (error) {
@@ -596,10 +567,10 @@ function CalendarPageInner() {
       setColdLoadingEvents(true);
     }
     /*
-     * Otherwise the previous window stays up while the new one loads. Blanking
-     * it meant a scroll that crossed a boundary emptied the grid and put a
-     * loader over it for the length of a round trip, which reads as the
-     * calendar breaking rather than fetching. The windows overlap anyway.
+     * Otherwise the previous window stays up while the new one loads. Blanked,
+     * a scroll that crossed a boundary would empty the grid and put a loader
+     * over it for the length of a round trip, which reads as the calendar
+     * breaking rather than fetching. The windows overlap anyway.
      */
 
     if (!force && fresh) {
@@ -623,11 +594,15 @@ function CalendarPageInner() {
       setEvents(freshEvents);
       hasLoadedOnceRef.current = true;
       setColdLoadingEvents(false);
+      setFirstLoadError("");
       prefetchAdjacentRanges(eventRange);
     } catch (error) {
       if (isAbortError(error)) return;
       setColdLoadingEvents(false);
-      setErrorMessage(getErrorMessage(error, "Could not load your calendar events from Supabase."));
+      const message = getErrorMessage(error, "Could not load your events.");
+      // Nothing on screen yet: the grid says so, with Try again, rather than drawing an empty week.
+      if (hasLoadedOnceRef.current) setErrorMessage(message);
+      else setFirstLoadError(message);
     } finally {
       if (eventAbortRef.current === controller) {
         eventAbortRef.current = null;
@@ -699,18 +674,21 @@ function CalendarPageInner() {
 
   /** Send the user to Google to grant calendar access again. */
   async function startGoogleConnection() {
+    setReconnectingGoogle(true);
     try {
       setErrorMessage("");
-      const response = await authedFetch("/api/auth/google?connect=true&format=json");
+      const response = await authedFetch("/api/auth/google?connect=true");
       const body = await response.json().catch(() => ({})) as { error?: string; url?: string };
 
       if (!response.ok || !body.url) {
-        throw new Error(body.error || "Could not start Google Calendar connection.");
+        throw new Error(body.error || "Could not start connecting Google Calendar.");
       }
 
+      // Busy until the browser has left for Google.
       window.location.assign(body.url);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Could not start Google Calendar connection."));
+      setErrorMessage(getErrorMessage(error, "Could not start connecting Google Calendar."));
+      setReconnectingGoogle(false);
     }
   }
 
@@ -787,33 +765,22 @@ function CalendarPageInner() {
       return;
     }
 
-    try {
-      setErrorMessage("");
-      await deleteCalendarEvent(eventId, event?.google_event_id);
-      setSelectedEvent(null);
-      setSelectedOccurrence(null);
-      invalidateEventCacheForEventLike(event);
-      await loadEvents({ force: true });
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Could not delete that event."));
-      throw error;
-    }
+    setErrorMessage("");
+    await deleteCalendarEvent(eventId, event?.google_event_id);
+    setSelectedEvent(null);
+    setSelectedOccurrence(null);
+    invalidateEventCacheForEventLike(event);
+    await loadEvents({ force: true });
   }
 
   async function handleCreateSave(eventData: Omit<CalendarEvent, "id" | "created_at">) {
-    try {
-      setErrorMessage("");
-      const { event: created, warning } = await createCalendarEvent(eventData);
-      setCreatingEvent(null);
-      invalidateEventCacheForEventLike(created);
-      // A new Google series arrives as its first day, without its rule; the form's says it repeats.
-      invalidateEventCacheForEventLike(eventData);
-      await loadEvents({ force: true });
-      if (warning) setErrorMessage(warning);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Could not create that event."));
-      throw error;
-    }
+    setErrorMessage("");
+    const { event: created } = await createCalendarEvent(eventData);
+    setCreatingEvent(null);
+    invalidateEventCacheForEventLike(created);
+    // A new Google series arrives as its first day, without its rule; the form's says it repeats.
+    invalidateEventCacheForEventLike(eventData);
+    await loadEvents({ force: true });
   }
 
   async function handleEditSave(eventData: Omit<CalendarEvent, "id" | "created_at">) {
@@ -842,30 +809,22 @@ function CalendarPageInner() {
       return;
     }
 
-    try {
-      setErrorMessage("");
-      let warning = "";
-      if (originalEvent.id.startsWith("google_") && originalEvent.google_event_id) {
-        const changes = buildGoogleEventPatch(eventData, shown);
-        if (Object.keys(changes).length > 0) await updateGoogleEvent(originalEvent.google_event_id, changes, "single");
-        forgetGoogleSeries(changes.repeat ? "all" : "single");
-      } else if (eventData.sync_to_google && !originalEvent.sync_to_google && !originalEvent.google_event_id) {
-        // A CronCal event moved into Google with the form's Google switch.
-        await moveCalendarEventToGoogle(originalEvent.id, eventData);
-      } else {
-        const result = await updateCalendarEvent(originalEvent.id, eventData, originalEvent);
-        if (result.warning) warning = result.warning;
-      }
-
-      setEditingContext(null);
-      invalidateEventCacheForEventLike(originalEvent);
-      invalidateEventCacheForEventLike(eventData);
-      await loadEvents({ force: true });
-      if (warning) setErrorMessage(warning);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Could not update that event."));
-      throw error;
+    setErrorMessage("");
+    if (originalEvent.id.startsWith("google_") && originalEvent.google_event_id) {
+      const changes = buildGoogleEventPatch(eventData, shown);
+      if (Object.keys(changes).length > 0) await updateGoogleEvent(originalEvent.google_event_id, changes, "single");
+      forgetGoogleSeries(changes.repeat ? "all" : "single");
+    } else if (eventData.sync_to_google) {
+      // A CronCal event moved into Google with the form's Google switch.
+      await moveCalendarEventToGoogle(originalEvent.id, eventData);
+    } else {
+      await updateCalendarEvent(originalEvent.id, eventData);
     }
+
+    setEditingContext(null);
+    invalidateEventCacheForEventLike(originalEvent);
+    invalidateEventCacheForEventLike(eventData);
+    await loadEvents({ force: true });
   }
 
   async function handleEditDelete(_eventId: string) {
@@ -876,16 +835,11 @@ function CalendarPageInner() {
       return;
     }
 
-    try {
-      setErrorMessage("");
-      await deleteCalendarEvent(originalEvent.id, originalEvent.google_event_id);
-      setEditingContext(null);
-      invalidateEventCacheForEventLike(originalEvent);
-      await loadEvents({ force: true });
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Could not delete that event."));
-      throw error;
-    }
+    setErrorMessage("");
+    await deleteCalendarEvent(originalEvent.id, originalEvent.google_event_id);
+    setEditingContext(null);
+    invalidateEventCacheForEventLike(originalEvent);
+    await loadEvents({ force: true });
   }
 
   /** A save for the days chosen. Returns what the page should say afterwards, if anything. */
@@ -905,8 +859,7 @@ function CalendarPageInner() {
     } else if (scope === "following") {
       await applyRecurringFollowingEdit(event, occurrence, eventData);
     } else {
-      const { warning } = await applyRecurringSeriesEdit(event, occurrence, eventData, shown);
-      return warning ?? "";
+      await applyRecurringSeriesEdit(event, occurrence, eventData, shown);
     }
     return "";
   }
@@ -927,8 +880,7 @@ function CalendarPageInner() {
     } else if (scope === "following") {
       await applyRecurringFollowingEdit(event, occurrence, movedFields);
     } else {
-      const { warning } = await applyRecurringSeriesEdit(event, occurrence, movedFields, draftForDay(event, occurrence));
-      return warning ?? "";
+      await applyRecurringSeriesEdit(event, occurrence, movedFields, draftForDay(event, occurrence));
     }
     return "";
   }
@@ -970,7 +922,7 @@ function CalendarPageInner() {
       invalidateEventCacheForEventLike(request.event);
       if (request.save) invalidateEventCacheForEventLike(request.save.eventData);
       await loadEvents({ force: true });
-      if (warning) setErrorMessage(warning);
+      if (warning) setNotice({ tone: "info", message: warning });
     } catch (error) {
       const fallback = request.action === "delete"
         ? "Could not delete that event. Try again."
@@ -995,8 +947,7 @@ function CalendarPageInner() {
       await updateGoogleEvent(event.google_event_id, buildGoogleEventPatch(moved, event));
       return;
     }
-    const { warning } = await updateCalendarEvent(event.id, moved, event);
-    if (warning) setErrorMessage(warning);
+    await updateCalendarEvent(event.id, moved);
   }
 
   async function handleEventMove(
@@ -1055,6 +1006,7 @@ function CalendarPageInner() {
       showGoogleEvents={showGoogleEvents}
       onToggleGoogleEvents={() => setShowGoogleEvents((current) => !current)}
       onReconnectGoogle={() => { void startGoogleConnection(); }}
+      reconnectingGoogle={reconnectingGoogle}
       stacked={phone}
     />
   );
@@ -1066,8 +1018,8 @@ function CalendarPageInner() {
         flexDirection: "column",
         height: "100%",
         flexShrink: phone ? 0 : undefined,
-        /* Under the dock to the foot of the screen on a desktop, where the
-           grid owns the page. A phone's page scrolls on past it to the
+        /* Over the foot room to the bottom of the screen on a desktop, where
+           the grid owns the page. A phone's page scrolls on past it to the
            sidebar, which <main>'s own room already clears. */
         marginBottom: phone ? undefined : UNDER_DOCK_MARGIN,
       }}
@@ -1082,6 +1034,9 @@ function CalendarPageInner() {
         weekWindow={weekWindow}
       />
 
+      {notice && (
+        <StatusBanner tone={notice.tone} message={notice.message} onDismiss={() => setNotice(null)} style={{ marginBottom: 12 }} />
+      )}
       {errorMessage && (
         <StatusBanner
           message={errorMessage}
@@ -1105,6 +1060,19 @@ function CalendarPageInner() {
         }}>
           {coldLoadingEvents ? (
             <LoadingState label="Loading calendar…" minHeight="60vh" />
+          ) : firstLoadError ? (
+            <div style={{ maxWidth: 420, width: "100%", margin: "64px auto", padding: "0 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+              <StatusBanner message={firstLoadError} />
+              <DialogButton
+                variant="secondary"
+                onClick={() => {
+                  setFirstLoadError("");
+                  void loadEvents({ force: true });
+                }}
+              >
+                Try again
+              </DialogButton>
+            </div>
           ) : view === "month" ? (
             <MonthGrid
               currentDate={currentDate}
@@ -1171,6 +1139,7 @@ function CalendarPageInner() {
       {/* ── Which days: over the form, once there is something to apply ── */}
       {scopeRequest && (
         <ScopePicker
+          action={scopeRequest.action}
           title={SCOPE_TITLES[scopeRequest.action]}
           options={scopeRequest.options}
           value={scopeChoice}
@@ -1186,8 +1155,8 @@ function CalendarPageInner() {
   );
 
   /*
-   * On a phone the sidebar cannot sit beside the grid: at 390px it left the
-   * week 140px wide. It goes underneath instead, outside the full-height
+   * On a phone the sidebar cannot sit beside the grid: at 390px it would
+   * leave the week 140px wide. It goes underneath instead, outside the full-height
    * block, so the grid still owns the first screen and the mini calendar,
    * the counts and the Google switch are one scroll away rather than gone.
    */
@@ -1201,13 +1170,4 @@ function CalendarPageInner() {
   }
 
   return calendar;
-}
-
-/** A boundary for `useUrlTarget`'s read of the query string — see /tools. */
-export default function CalendarPage() {
-  return (
-    <Suspense fallback={<LoadingState label="Loading calendar…" minHeight="60vh" />}>
-      <CalendarPageInner />
-    </Suspense>
-  );
 }

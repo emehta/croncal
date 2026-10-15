@@ -6,7 +6,7 @@ import AppShell from "@/components/AppShell";
 import { getErrorMessage } from "@/lib/error-utils";
 import { supabase } from "@/lib/supabase";
 import { useAppConfig } from "@/selfhost/ConfigProvider";
-import { OWNER_FLAG } from "@/selfhost/constants";
+import { APP_NAME, OWNER_FLAG } from "@/selfhost/constants";
 import {
   ConnectScreen,
   CreateAccountScreen,
@@ -45,13 +45,13 @@ export default function SetupGate({ children }: { children: ReactNode }) {
     try {
       const response = await fetch("/api/selfhost/status", { cache: "no-store", signal: AbortSignal.timeout(STATUS_TIMEOUT_MS) });
       const body = (await response.json().catch(() => ({}))) as StatusResponse & { error?: string };
-      if (!response.ok) throw new Error(body.error ?? `CronCal couldn't check its setup (${response.status}).`);
+      if (!response.ok) throw new Error(body.error ?? `Something went wrong (${response.status}). Try again in a moment.`);
       setStatus(body);
       setProblem(null);
     } catch (error) {
       setProblem(
         error instanceof DOMException && error.name === "TimeoutError" ? "That took too long. Try again."
-        : error instanceof TypeError ? "Couldn't reach CronCal. Check it's still running."
+        : error instanceof TypeError ? `Could not reach ${APP_NAME}. Check it's still running.`
         : getErrorMessage(error, "Try again in a moment."),
       );
     } finally {

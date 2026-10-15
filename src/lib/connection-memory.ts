@@ -16,7 +16,7 @@
  * The same trick the app already plays with the theme before first paint, and
  * with `page-cache` between navigations.
  */
-const CONNECTION_MEMORY_PREFIX = "vitae-connected:";
+const CONNECTION_MEMORY_PREFIX = "connected:";
 
 export function rememberedConnection(key: string): boolean {
   if (typeof window === "undefined") return false;

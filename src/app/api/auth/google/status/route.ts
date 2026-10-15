@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json<GoogleStatusPayload>({
       connected,
-      needsReconnect: Boolean(auth) && (!tokenState.accessToken || scopeStatus === "missing"),
+      needsReconnect: !tokenState.accessToken || scopeStatus === "missing",
       googleEmail: auth.google_email,
       calendarId: auth.calendar_id,
       tokenExpiry: tokenState.tokenExpiry ?? auth.token_expiry,

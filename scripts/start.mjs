@@ -105,11 +105,6 @@ function openBrowser() {
 }
 
 const already = await answering();
-/* PUBLIK_SELF_TEST=1 npm start is publik's check that the built app reaches
-   publik's AI (src/instrumentation.ts): it needs the port to itself. */
-if (already === "croncal" && process.env.PUBLIK_SELF_TEST) {
-  stop("CronCal is already running. Close its window, then run the self-test again.");
-}
 if (already === "croncal") {
   console.log(`CronCal is already running at ${APP_URL}.`);
   openBrowser();
@@ -125,7 +120,6 @@ if (!PREBUILT) {
   if (!built) {
     console.log("Building CronCal. The first time takes a minute.\n");
     const env = { ...process.env, CRONCAL_SKIP_TYPECHECK: "1" };
-    delete env.PUBLIK_SELF_TEST;
     const result = spawnSync(process.execPath, [NEXT, "build"], { stdio: "inherit", env });
     if (result.status !== 0) stop("The build stopped with an error (above). If you changed nothing, run npm install, then npm start.");
     writeFileSync(STAMP, stamp);
@@ -137,8 +131,8 @@ const server = PREBUILT
   : spawn(process.execPath, [NEXT, "start", "-H", HOST, "-p", String(PORT)], { stdio: ["ignore", "pipe", "inherit"] });
 server.stdout.on("data", (chunk) => {
   const text = chunk.toString();
-  // Errors, and publik's self-test line (PUBLIK_SELF_TEST=1 npm start), reach the terminal.
-  if (/error|publik self-test/i.test(text)) process.stdout.write(text);
+  // Only errors reach the terminal.
+  if (/error/i.test(text)) process.stdout.write(text);
 });
 let ready = false;
 server.on("exit", (code) => {

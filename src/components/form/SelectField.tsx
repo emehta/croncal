@@ -19,8 +19,7 @@ export interface SelectOption<T extends string> {
  * A choice from a list, drawn as a field that opens a menu.
  *
  * It replaces `<select>`, which opens the operating system's own list: a grey
- * panel on a Mac, a wheel on an iPhone, ignoring the theme on both. The time
- * zone and Repeats fields on the event card were the owner's example.
+ * panel on a Mac, a wheel on an iPhone, ignoring the theme on both.
  *
  * The menu is a Popover, portalled to the body, so a card that scrolls cannot
  * clip it. Arrow keys move through the options, Enter or Space picks one,

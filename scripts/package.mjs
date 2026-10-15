@@ -11,7 +11,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -63,10 +63,13 @@ walk(APP);
 if (secrets.length > 0) stop(`the download would carry ${secrets.join(", ")}. Package from a clean checkout.`);
 if (native.length > 0) stop(`a native module would tie the download to this system: ${native.join(", ")}`);
 
-// Info-ZIP keeps the launcher's executable bit; Windows has no zip, but its tar writes one.
+// Info-ZIP keeps the launcher's executable bit. Windows has no zip, but its tar
+// writes one; GNU tar would write a plain tar under the .zip name instead.
 const zip = spawnSync("zip", ["-qr", ZIP, "croncal"], { cwd: OUT, stdio: "inherit" });
 if (zip.error || zip.status !== 0) {
+  if (process.platform !== "win32") stop("zip is needed to make the archive. Install it (on Linux, apt install zip), then run this again.");
   const tar = spawnSync("tar", ["-a", "-cf", ZIP, "croncal"], { cwd: OUT, stdio: "inherit" });
   if (tar.error || tar.status !== 0) stop("neither zip nor tar could make the archive.");
 }
+if (readFileSync(ZIP).subarray(0, 2).toString("latin1") !== "PK") stop("the archive came out as something other than a zip.");
 console.log(`package: ${path.relative(ROOT, ZIP)}, ${(statSync(ZIP).size / 1e6).toFixed(1)} MB`);

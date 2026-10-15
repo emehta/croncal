@@ -56,25 +56,21 @@ interface CalendarSidebarProps {
   showGoogleEvents: boolean;
   onToggleGoogleEvents: () => void;
   onReconnectGoogle: () => void;
+  /** Reconnect was pressed and the page is on its way to Google. */
+  reconnectingGoogle?: boolean;
   /** Laid out under the grid on a phone, full width with larger targets. */
   stacked?: boolean;
   /**
    * The days the week grid has on screen, shaded in the mini calendar. Null
-   * outside week view, where the row holding today is shaded instead. It
-   * used to shade today's row always, so it agreed with the grid only when
-   * the grid happened to show that calendar week.
+   * outside week view, where the row holding today is shaded instead.
    */
   highlightWindow?: DayWindow | null;
 }
 
 /**
- * A bordered row in the sidebar's lower stack.
- *
- * The three stat rows and the Google row were each given their own padding,
- * and the Google row a marginTop on top of the stack's gap, so it sat two
- * pixels further from "This month" than the stats sat from each other and ran
- * several pixels taller because the eye button inside it was the tallest thing
- * in the row. One shape, one minimum height, no extra margin.
+ * A bordered row in the sidebar's lower stack: the three stat rows and the
+ * Google row share one shape, one minimum height and no extra margin, so they
+ * sit evenly and stand the same height.
  */
 const SIDEBAR_ROW: React.CSSProperties = {
   display: "flex",
@@ -95,8 +91,7 @@ const SIDEBAR_ROW: React.CSSProperties = {
 };
 
 /*
- * The shade behind the days in view. It was a fixed violet, rgba(168,85,247,
- * .08), in all four themes; a wash of the theme's own accent belongs to each.
+ * The shade behind the days in view: a wash of the theme's own accent.
  */
 const RANGE_SHADE = "color-mix(in srgb, var(--c-accent) 14%, transparent)";
 
@@ -108,6 +103,7 @@ export default function CalendarSidebar({
   showGoogleEvents,
   onToggleGoogleEvents,
   onReconnectGoogle,
+  reconnectingGoogle = false,
   stacked = false,
   highlightWindow = null,
 }: CalendarSidebarProps) {
@@ -324,10 +320,10 @@ export default function CalendarSidebar({
                   {/*
                     * The dot's slot is always there, shown or not.
                     *
-                    * Rendering it only for days that have events meant the
-                    * mini calendar grew by a couple of pixels a row the moment
-                    * events arrived — about ten pixels in total, which pushed
-                    * the stat rows and the Google row down after first paint.
+                    * Rendered only for days that have events, it would grow
+                    * the mini calendar by a couple of pixels a row the moment
+                    * events arrived, pushing the stat rows and the Google row
+                    * down after first paint.
                     */}
                   <div
                     style={{
@@ -371,20 +367,17 @@ export default function CalendarSidebar({
         ))}
 
         {/*
-          Google, as a switch rather than a status.
-          The header used to carry a pill reading "Google Calendar connected",
-          which spent a permanent slot telling you something you already knew
-          and only did anything on a second read. Connecting and disconnecting
-          live in Settings; what belongs on the calendar is whether those
-          events are showing, so that is all this is.
+          Google, as a switch rather than a status. Connecting and
+          disconnecting live in Settings; what belongs on the calendar is
+          whether those events are showing, so that is all this is.
 
           A dead token is the one thing worth interrupting for, so "reconnect"
           replaces the switch with the prompt. Disconnected shows one quiet
           row that opens Settings, where Google is set up.
 
           While the status is still being checked the row is drawn anyway, with
-          the eye inert — the answer takes two calls out to Google, and the row
-          appearing afterwards shoved everything above it.
+          the eye inert: the answer takes two calls out to Google, and the row
+          appearing afterwards would shove everything around it.
         */}
         {(googleStatus === "connected" || googleStatus === "checking") && (
           <div style={{ ...SIDEBAR_ROW, gridColumn: stacked ? "1 / -1" : undefined }} aria-busy={googleStatus === "checking"}>
@@ -471,6 +464,8 @@ export default function CalendarSidebar({
           <button
             type="button"
             onClick={onReconnectGoogle}
+            disabled={reconnectingGoogle}
+            aria-busy={reconnectingGoogle || undefined}
             className="ui-hover-control"
             style={{
               ...SIDEBAR_ROW,
@@ -488,7 +483,7 @@ export default function CalendarSidebar({
             }}
           >
             <GoogleBrandIcon size={13} />
-            Reconnect Google
+            {reconnectingGoogle ? "Opening Google…" : "Reconnect Google"}
           </button>
         )}
       </div>

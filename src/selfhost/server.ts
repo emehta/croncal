@@ -58,7 +58,7 @@ export async function isProjectSecretKey(config: AppConfig, key: string): Promis
   if (!error) return true;
   // Only Supabase saying no is a wrong key; an outage must not read as one.
   if (error.status === 401 || error.status === 403) return false;
-  throw new SetupError("Couldn't reach Supabase. Try again.", 502);
+  throw new SetupError("Could not reach Supabase. Try again in a moment.", 502);
 }
 
 export interface Probe {
@@ -158,7 +158,7 @@ export async function resetOwnerPassword(config: AppConfig, password: string): P
   if (!data?.user_id) throw new SetupError("This project has no account yet. Make one instead.", 409);
   const { data: updated, error: updateError } = await client.auth.admin.updateUserById(data.user_id, { password });
   if (updateError || !updated.user?.email) {
-    throw new SetupError(`Supabase did not change the password: ${updateError?.message ?? "no reason given"}`, 502);
+    throw new SetupError(`Supabase didn't change the password: ${updateError?.message ?? "no reason given"}`, 502);
   }
   return updated.user.email;
 }
@@ -181,7 +181,7 @@ export async function createOwnerWith(client: SupabaseClient, email: string, pas
     await releaseClaim(client);
     const taken = error?.code === "email_exists" || /already/i.test(error?.message ?? "");
     throw new SetupError(
-      taken ? "That email already has an account in this project. Use another email." : `Supabase did not make the account: ${error?.message ?? "no reason given"}`,
+      taken ? "That email already has an account in this project. Use another email." : `Supabase didn't make the account: ${error?.message ?? "no reason given"}`,
       taken ? 409 : 502,
     );
   }

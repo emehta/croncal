@@ -15,6 +15,8 @@
   gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
+  /* A scroller has no floor of its own in a column, so a card taller than the window would squeeze it flat. */
+  flex-shrink: 0;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   scrollbar-width: none;

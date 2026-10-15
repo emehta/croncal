@@ -1,7 +1,7 @@
 /**
  * Global time formatting utilities.
  *
- * Reads user preference from localStorage ("vitae_time_format": "12h" | "24h").
+ * Reads user preference from localStorage ("time-format": "12h" | "24h").
  * Provides pure functions and a React hook for reactive updates.
  *
  * Until one is chosen in Settings, the clock is the one this browser's
@@ -22,7 +22,7 @@ let localeDefault: TimeFormatPref | null = null;
 export function getTimeFormat(): TimeFormatPref {
   if (typeof window === "undefined") return "24h";
   try {
-    const stored = localStorage.getItem("vitae_time_format");
+    const stored = localStorage.getItem("time-format");
     if (stored === "12h" || stored === "24h") return stored;
   } catch {
     // Storage blocked: the locale's own clock, below.
@@ -34,11 +34,11 @@ export function getTimeFormat(): TimeFormatPref {
 /** Persist the choice from Settings and tell every mounted clock. */
 export function setTimeFormat(value: TimeFormatPref): void {
   try {
-    localStorage.setItem("vitae_time_format", value);
+    localStorage.setItem("time-format", value);
   } catch {
     // The event below still updates every mounted consumer for this session.
   }
-  window.dispatchEvent(new CustomEvent("vitae-preference", { detail: { timeFormat: value } }));
+  window.dispatchEvent(new CustomEvent("preference-change", { detail: { timeFormat: value } }));
 }
 
 /** React hook: re-renders when the user changes the preference in Settings. */
@@ -47,10 +47,10 @@ export function useTimeFormat(): TimeFormatPref {
 }
 
 function subscribe(callback: () => void): () => void {
-  window.addEventListener("vitae-preference", callback);
+  window.addEventListener("preference-change", callback);
   window.addEventListener("storage", callback);
   return () => {
-    window.removeEventListener("vitae-preference", callback);
+    window.removeEventListener("preference-change", callback);
     window.removeEventListener("storage", callback);
   };
 }
@@ -75,5 +75,5 @@ export function formatHour(hour: number, format?: TimeFormatPref): string {
 
 /** Format a time range from two Dates (e.g. "3:00 PM – 4:30 PM"). */
 export function formatTimeRange(start: Date, end: Date, format?: TimeFormatPref): string {
-  return `${formatTime(start, format)} – ${formatTime(end, format)}`;
+  return `${formatTime(start, format)} to ${formatTime(end, format)}`;
 }
