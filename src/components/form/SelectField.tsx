@@ -13,6 +13,8 @@ export interface SelectOption<T extends string> {
   hint?: string;
   /** A dot in the option's colour. */
   color?: string;
+  /** An icon before the label, in the menu: an action among the choices, such as New goal. */
+  icon?: ReactNode;
 }
 
 /**
@@ -157,6 +159,7 @@ export default function SelectField<T extends string>({
                   className={styles.option}
                   onClick={() => choose(option.value)}
                 >
+                  {option.icon && <span aria-hidden="true" style={{ display: "flex", flexShrink: 0, color: "var(--c-text-3)" }}>{option.icon}</span>}
                   {option.color && (
                     <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "var(--ui-radius-round)", background: contentColor(option.color), flexShrink: 0 }} />
                   )}

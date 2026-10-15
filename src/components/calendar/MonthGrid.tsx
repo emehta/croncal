@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CalendarEvent } from "@/types/calendar-event";
-import { getAllOccurrencesInRange, type CalendarOccurrence } from "@/lib/calendar-occurrence-utils";
-import { addDays, isToday, startOfDay, toDateStr } from "@/lib/date-utils";
+import type { CalendarOccurrence } from "@/lib/calendar-occurrence-utils";
+import { occurrencesByDay } from "@/lib/event-days";
+import { DAYS_SHORT, addDays, isToday, startOfDay, toDateStr } from "@/lib/date-utils";
+import { usePhone } from "@/lib/use-viewport-width";
 import { getWeekRange, orderWeekdays, useWeekStart, type WeekStartPreference } from "@/lib/week-start";
 import { eventFill, eventInk } from "@/lib/styles";
 import eventStyles from "./CalendarEvents.module.css";
@@ -23,8 +25,6 @@ interface MonthGridProps {
   /** Reports the month the viewport has settled over, as its first day. */
   onDateChange?: (date: Date) => void;
 }
-
-const DAYS_HEADER_SUNDAY_FIRST = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
  * A week row is a fixed height so the scroll arithmetic is exact.
@@ -76,7 +76,8 @@ export default function MonthGrid({
   onDateChange,
 }: MonthGridProps) {
   const weekStart = useWeekStart();
-  const dayHeaders = orderWeekdays(DAYS_HEADER_SUNDAY_FIRST, weekStart);
+  const dayHeaders = orderWeekdays(DAYS_SHORT, weekStart);
+  const phone = usePhone();
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const programmaticScrollRef = useRef(false);
@@ -114,31 +115,15 @@ export default function MonthGrid({
     });
   }, []);
 
-  /* Every occurrence bucketed onto the days it covers, in one pass. */
-  const occurrencesByDay = useMemo(() => {
-    const rangeStart = startOfDay(strip.start);
-    const rangeEnd = addDays(startOfDay(strip.end), 7);
-    rangeEnd.setHours(23, 59, 59, 999);
-
-    const byDay = new Map<string, CalendarOccurrence[]>();
-    /*
-     * Not getOccurrencesForDay per cell, which expands every event over the
-     * whole range and throws all but one day away: on a scrolling strip,
-     * hundreds of expansions of the same list.
-     */
-    for (const occurrence of getAllOccurrencesInRange(events, rangeStart, rangeEnd)) {
-      const cursor = startOfDay(occurrence.start < rangeStart ? rangeStart : occurrence.start);
-      while (cursor < occurrence.end || cursor.getTime() === startOfDay(occurrence.start).getTime()) {
-        if (cursor > rangeEnd) break;
-        const key = toDateStr(cursor);
-        const bucket = byDay.get(key);
-        if (bucket) bucket.push(occurrence);
-        else byDay.set(key, [occurrence]);
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    }
-    return byDay;
-  }, [events, strip]);
+  /*
+   * Every occurrence bucketed onto the days it covers, in one pass (an
+   * all-day event on its own dates: lib/event-days). Not one expansion per
+   * cell, which on a scrolling strip is hundreds of expansions of one list.
+   */
+  const occurrencesForDays = useMemo(
+    () => occurrencesByDay(events, toDateStr(strip.start), toDateStr(addDays(strip.end, 6))),
+    [events, strip],
+  );
 
   /** The month sitting over the middle of the viewport. */
   const monthAtViewportCentre = useCallback((): Date | null => {
@@ -373,7 +358,7 @@ export default function MonthGrid({
         ref={scrollerRef}
         className="hide-scrollbar"
         onScroll={handleScroll}
-        role="grid"
+        role="region"
         aria-label={`${currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })} calendar`}
         style={{
           flex: "1 1 0%",
@@ -389,7 +374,6 @@ export default function MonthGrid({
         {weeks.map((week) => (
           <div
             key={toDateStr(week)}
-            role="row"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(7, 1fr)",
@@ -401,14 +385,15 @@ export default function MonthGrid({
               const day = addDays(week, colIdx);
               const inMonth = day.getMonth() === visibleMonth;
               const today = isToday(day);
-              const dayEvents = occurrencesByDay.get(toDateStr(day)) ?? [];
+              const dayEvents = occurrencesForDays.get(toDateStr(day)) ?? [];
               const visible = dayEvents.slice(0, 3);
               const overflow = dayEvents.length - 3;
 
               return (
                 <div
                   key={colIdx}
-                  role="gridcell"
+                  /* On a phone the whole day is the target for opening it: its number alone is a fingertip wide. */
+                  onClick={phone ? (event) => { if (!(event.target as Element).closest("button")) onDateClick(day); } : undefined}
                   style={{
                     borderLeft: colIdx === 0 ? "none" : "1px solid var(--c-border-sub)",
                     borderTop: "1px solid var(--c-border-sub)",
@@ -459,8 +444,8 @@ export default function MonthGrid({
                         color: today ? "var(--cal-today-text)" : inMonth ? "var(--c-text-2)" : "var(--c-text-4)",
                         background: today ? "var(--c-accent-strong)" : "transparent",
                         borderRadius: "var(--ui-radius-item)",
-                        minWidth: 22,
-                        height: 22,
+                        minWidth: phone ? 32 : 22,
+                        height: phone ? 32 : 22,
                         padding: "0 6px",
                         display: "flex",
                         alignItems: "center",

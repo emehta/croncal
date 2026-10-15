@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowSquareOut, CalendarBlank, Clock, DownloadSimple, UserCircle } from "@phosphor-icons/react";
+import { CalendarBlank, Clock, DownloadSimple, UserCircle } from "@phosphor-icons/react";
+import ExternalLink from "@/components/ExternalLink";
 import { Divider, SectionHeader, SettingsRow, TogglePill, settingsNote } from "@/components/SettingsControls";
 import StatusBanner from "@/components/StatusBanner";
 import GoogleSettings from "@/components/GoogleSettings";
@@ -172,10 +173,7 @@ export default function SettingsCard({
         <div style={{ ...signupBox, marginTop: 4 }}>
           <span style={settingsNote}>Anyone can sign up to your Supabase project. Switch off &ldquo;Allow new users to sign up&rdquo;.</span>
           {links && (
-            <a href={links.authProviders} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--c-accent)", fontWeight: 600, fontSize: "var(--ui-type-label)", whiteSpace: "nowrap" }}>
-              Open Supabase
-              <ArrowSquareOut size={13} weight="bold" aria-hidden="true" />
-            </a>
+            <ExternalLink href={links.authProviders} style={{ fontSize: "var(--ui-type-label)" }}>Open Supabase</ExternalLink>
           )}
         </div>
       )}

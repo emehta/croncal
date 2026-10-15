@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { assertDeleted } from "@/lib/supabase-delete";
+import { type RangeQuery, fetchAllRows } from "@/lib/supabase-paging";
 import { authedFetch } from "@/lib/authed-fetch";
-import { getTimeZoneParts, zonedDateTimeToUtc } from "@/lib/calendar-timezone";
 import type {
   CalendarEvent,
   GoogleEventChanges,
@@ -9,9 +9,10 @@ import type {
   RepeatChoice,
 } from "@/types/calendar-event";
 import { buildGoogleEventPatch, googleCreateFields } from "@/lib/google-event-changes";
-import { changedRowFields, dayTimesChanged, planSeriesMove } from "@/lib/series-edit";
+import { type ChangedDayUpdate, planAllDaysEdit, planFollowingEdit } from "@/lib/series-edit";
 import { isAbortError } from "@/lib/error-utils";
 import { parseGoogleEventsResponse } from "@/lib/google-events-response";
+import { SESSION_ERROR_CODE } from "@/lib/session-error";
 
 type SupabaseErrorInfo = {
   message?: string;
@@ -38,30 +39,6 @@ function withSource(events: CalendarEvent[]): CalendarEvent[] {
   return events.map((event) => ({ ...event, source: event.source ?? "croncal" }));
 }
 
-function normalizeExceptionStarts(values: string[] | null | undefined): string[] {
-  return [...new Set((values ?? []).filter(Boolean))]
-    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-}
-
-function splitExceptionStarts(
-  values: string[] | null | undefined,
-  pivotIso: string,
-): { before: string[]; fromPivot: string[] } {
-  const pivotMs = new Date(pivotIso).getTime();
-  const before: string[] = [];
-  const fromPivot: string[] = [];
-
-  for (const value of normalizeExceptionStarts(values)) {
-    if (new Date(value).getTime() < pivotMs) {
-      before.push(value);
-    } else {
-      fromPivot.push(value);
-    }
-  }
-
-  return { before, fromPivot };
-}
-
 function stripVirtualFields(
   event: Partial<Omit<CalendarEvent, "id" | "created_at">> | CalendarEvent,
 ): Record<string, unknown> {
@@ -78,23 +55,6 @@ function stripVirtualFields(
   return payload;
 }
 
-function formatPartNumber(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-function mapOccurrenceStartToTimeZone(
-  occurrenceIso: string,
-  fromTimeZone: string,
-  toTimeZone: string,
-  targetStartIso: string,
-): string {
-  const occurrenceParts = getTimeZoneParts(new Date(occurrenceIso), fromTimeZone);
-  const targetStartParts = getTimeZoneParts(new Date(targetStartIso), toTimeZone);
-  const dateStr = `${occurrenceParts.year}-${formatPartNumber(occurrenceParts.month)}-${formatPartNumber(occurrenceParts.day)}`;
-  const timeStr = `${formatPartNumber(targetStartParts.hour)}:${formatPartNumber(targetStartParts.minute)}`;
-  return zonedDateTimeToUtc(dateStr, timeStr, toTimeZone, targetStartParts.second).toISOString();
-}
-
 export type { RecurrenceEditScope };
 export { buildGoogleEventPatch };
 
@@ -102,55 +62,62 @@ export type CalendarMutationResult = {
   event: CalendarEvent;
 };
 
-async function getResponseError(response: Response, fallback: string): Promise<string> {
-  const payload = await response.json().catch(() => ({})) as { error?: string };
-  return payload.error || fallback;
+/**
+ * A refusal from one of CronCal's Google routes, in its own words. `reconnect`
+ * is a 401 about Google rather than about the session (lib/session-error):
+ * Google no longer accepts the connection, a revoked grant above all, which
+ * only connecting again fixes.
+ */
+export class GoogleRouteError extends Error {
+  reconnect: boolean;
+
+  constructor(message: string, reconnect: boolean) {
+    super(message);
+    this.name = "GoogleRouteError";
+    this.reconnect = reconnect;
+  }
 }
 
+async function googleRouteError(response: Response, fallback: string): Promise<GoogleRouteError> {
+  const payload = await response.json().catch(() => ({})) as { error?: string; code?: string };
+  return new GoogleRouteError(payload.error || fallback, response.status === 401 && payload.code !== SESSION_ERROR_CODE);
+}
+
+/**
+ * CronCal's events for a window: the one-offs and changed days in it, and the
+ * series that can have a day in it (begun by its end, and not ended before
+ * its start). Each read page by page (lib/supabase-paging), so a calendar
+ * past PostgREST's thousand rows a response still comes back whole.
+ */
 export async function fetchCalendarEvents(
   startDate: string,
   endDate: string,
   signal?: AbortSignal,
 ): Promise<CalendarEvent[]> {
-  const rangeQuery = supabase
-    .from("calendar_events")
-    .select("*")
-    .lte("start_time", endDate)
-    .gte("end_time", startDate)
-    .order("start_time", { ascending: true });
+  const read = (label: string, build: () => RangeQuery<CalendarEvent>) =>
+    fetchAllRows(build).catch((error: unknown) => {
+      if (!isAbortError(error)) console.error(`fetchCalendarEvents ${label} query failed:`, normalizeSupabaseError(error));
+      throw error;
+    });
+  const events = () => {
+    const query = supabase.from("calendar_events").select("*");
+    return signal ? query.abortSignal(signal) : query;
+  };
 
-  const recurringQuery = supabase
-    .from("calendar_events")
-    .select("*")
-    .not("recurrence", "is", null)
-    .order("start_time", { ascending: true });
-
-  const [
-    { data: rangeData, error: rangeError },
-    { data: recurringData, error: recurringError },
-  ] = await Promise.all([
-    signal ? rangeQuery.abortSignal(signal) : rangeQuery,
-    signal ? recurringQuery.abortSignal(signal) : recurringQuery,
+  const [rangeEvents, recurringEvents] = await Promise.all([
+    read("range", () => events()
+      .lte("start_time", endDate)
+      .gte("end_time", startDate)
+      .order("start_time", { ascending: true })
+      .order("id", { ascending: true })),
+    read("recurring", () => events()
+      .not("recurrence", "is", null)
+      .lte("start_time", endDate)
+      .or(`recurrence_until.is.null,recurrence_until.gte."${startDate}"`)
+      .order("start_time", { ascending: true })
+      .order("id", { ascending: true })),
   ]);
 
-  if (rangeError) {
-    if (isAbortError(rangeError)) {
-      throw rangeError;
-    }
-    console.error("fetchCalendarEvents range query failed:", normalizeSupabaseError(rangeError));
-    throw rangeError;
-  }
-
-  const rangeEvents = (rangeData as CalendarEvent[]) ?? [];
-
-  if (recurringError) {
-    if (!isAbortError(recurringError)) {
-      console.error("fetchCalendarEvents recurring query failed:", normalizeSupabaseError(recurringError));
-    }
-    throw recurringError;
-  }
-
-  const recurringEvents = (recurringData as CalendarEvent[]) ?? [];
   const merged = [...rangeEvents];
   const seenIds = new Set(rangeEvents.map((event) => event.id));
 
@@ -172,10 +139,7 @@ export async function fetchGoogleEvents(
   const params = new URLSearchParams({ timeMin: startDate, timeMax: endDate });
   const res = await authedFetch(`/api/google-calendar/events?${params.toString()}`, { signal });
 
-  if (!res.ok) {
-    const payload = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(payload.error || "Could not load Google Calendar events.");
-  }
+  if (!res.ok) throw await googleRouteError(res, "Could not load Google Calendar events.");
 
   // Checked here, once, for every caller; see lib/google-events-response.
   const events = parseGoogleEventsResponse(await res.json().catch(() => null));
@@ -204,7 +168,7 @@ export async function createGoogleCalendarEvent(
     body: JSON.stringify(googleCreateFields(event)),
   });
   if (!res.ok) {
-    throw new Error(await getResponseError(res, "Google Calendar could not add the event. Try again in a moment."));
+    throw await googleRouteError(res, "Google Calendar could not add the event. Try again in a moment.");
   }
   const payload = await res.json().catch(() => null) as { event?: CalendarEvent } | null;
   if (!payload?.event?.google_event_id) {
@@ -312,31 +276,16 @@ export async function deleteCalendarEvent(
     });
 
     if (!res.ok) {
-      throw new Error(await getResponseError(res, "Could not delete that Google Calendar event."));
+      throw await googleRouteError(res, "Could not delete that Google Calendar event.");
     }
 
     return;
   }
 
-  const { error: childDeleteError } = await supabase
-    .from("calendar_events")
-    .delete()
-    .eq("recurrence_parent_id", id);
-
-  if (childDeleteError) {
-    console.error("deleteCalendarEvent child delete error:", childDeleteError);
-    throw childDeleteError;
-  }
-
-  // Delete from Supabase
-  const { data, error } = await supabase
-    .from("calendar_events")
-    .delete()
-    .eq("id", id)
-    .select("id");
-
+  // The event and its changed days together (supabase/schema.sql).
+  const { data, error } = await supabase.rpc("croncal_delete_event", { p_event: id });
   if (error) console.error("deleteCalendarEvent error:", error);
-  assertDeleted(data, error, "event");
+  assertDeleted(typeof data === "number" && data > 0 ? [id] : [], error, "event");
 }
 
 export type GoogleSaveResult = {
@@ -360,7 +309,7 @@ export async function updateGoogleEvent(
     body: JSON.stringify({ googleEventId, scope, ...changes }),
   });
   if (!res.ok) {
-    throw new Error(await getResponseError(res, "Google Calendar could not save that change. Try again in a moment."));
+    throw await googleRouteError(res, "Google Calendar could not save that change. Try again in a moment.");
   }
   const payload = await res.json().catch(() => ({})) as { notCarried?: unknown };
   return { notCarried: typeof payload.notCarried === "number" ? payload.notCarried : 0 };
@@ -372,7 +321,7 @@ export type GoogleSeriesRepeat = { repeat: RepeatChoice; label: string | null };
 export async function fetchGoogleSeriesRepeat(seriesId: string): Promise<GoogleSeriesRepeat> {
   const res = await authedFetch(`/api/google-calendar/events/series?seriesId=${encodeURIComponent(seriesId)}`);
   if (!res.ok) {
-    throw new Error(await getResponseError(res, "Google Calendar did not send this series' repeat. Try again."));
+    throw await googleRouteError(res, "Google Calendar did not send this series' repeat. Try again.");
   }
   const payload = await res.json().catch(() => null) as Partial<GoogleSeriesRepeat> | null;
   const repeats: RepeatChoice[] = ["none", "custom", "daily", "weekdays", "weekly", "biweekly", "monthly", "yearly"];
@@ -382,258 +331,118 @@ export async function fetchGoogleSeriesRepeat(seriesId: string): Promise<GoogleS
   return { repeat: payload.repeat as RepeatChoice, label: typeof payload.label === "string" ? payload.label : null };
 }
 
+/** What a write sends of an event: its own fields, without the id, creation time or what only the page knows. */
+function rowFields(event: Partial<CalendarEvent>): Record<string, unknown> {
+  return stripVirtualFields(event as Partial<Omit<CalendarEvent, "id" | "created_at">>);
+}
+
+/** A series' changed days: the rows that each replace one of its days. */
+async function readChangedDays(seriesId: string): Promise<CalendarEvent[]> {
+  return fetchAllRows<CalendarEvent>(() => supabase
+    .from("calendar_events")
+    .select("*")
+    .eq("recurrence_parent_id", seriesId)
+    .order("original_occurrence_start", { ascending: true })
+    .order("id", { ascending: true }));
+}
+
+function dayUpdates(days: ChangedDayUpdate[]): { id: string; fields: Record<string, unknown> }[] {
+  return days.map((day) => ({ id: day.id, fields: rowFields(day.fields) }));
+}
+
+/** A day of a series as the form showed it, when the caller has no other: the series at that day's times. */
+function seriesDay(series: CalendarEvent, day: { start: Date; end: Date }): CalendarEvent {
+  return { ...series, start_time: day.start.toISOString(), end_time: day.end.toISOString() };
+}
+
+/*
+ * Every change below that touches a series and its changed days together is
+ * one call to a function in supabase/schema.sql, which runs as one
+ * transaction: it happens whole or not at all, and the same call sent again
+ * changes nothing more. What changes is worked out here (lib/series-edit),
+ * from the series as the page has it, so a retry sends the same thing.
+ */
+
+/** One day of a CronCal series changed on its own: `updates` at that day's place. */
 export async function applyRecurringOccurrenceEdit(
   baseEvent: CalendarEvent,
   occurrence: { start: Date; end: Date },
   updates: Omit<CalendarEvent, "id" | "created_at">,
 ): Promise<void> {
-  const occurrenceIso = occurrence.start.toISOString();
-  const nextExceptions = normalizeExceptionStarts([
-    ...(baseEvent.recurrence_exceptions ?? []),
-    occurrenceIso,
-  ]);
-
-  const { error: baseError } = await supabase
-    .from("calendar_events")
-    .update({ recurrence_exceptions: nextExceptions })
-    .eq("id", baseEvent.id);
-
-  if (baseError) {
-    throw baseError;
-  }
-
-  const { data: existingOverride, error: existingOverrideError } = await supabase
-    .from("calendar_events")
-    .select("*")
-    .eq("recurrence_parent_id", baseEvent.id)
-    .eq("original_occurrence_start", occurrenceIso)
-    .maybeSingle();
-
-  if (existingOverrideError) {
-    throw existingOverrideError;
-  }
-
-  const overrideEvent: Omit<CalendarEvent, "id" | "created_at"> = {
-    ...baseEvent,
-    ...updates,
-    recurrence: null,
-    sync_to_google: false,
-    google_event_id: null,
-    recurrence_until: null,
-    recurrence_exceptions: [],
-    recurrence_parent_id: baseEvent.id,
-    original_occurrence_start: occurrenceIso,
-  };
-
-  const payload = stripVirtualFields(overrideEvent);
-
-  if (existingOverride) {
-    const { error } = await supabase
-      .from("calendar_events")
-      .update(payload)
-      .eq("id", existingOverride.id);
-
-    if (error) {
-      throw error;
-    }
-    return;
-  }
-
-  const { error } = await supabase
-    .from("calendar_events")
-    .insert([payload]);
-
-  if (error) {
-    throw error;
-  }
+  const { error } = await supabase.rpc("croncal_change_day", {
+    p_series: baseEvent.id,
+    p_place: occurrence.start.toISOString(),
+    p_fields: rowFields(updates),
+  });
+  if (error) throw error;
 }
 
 /**
  * A change to every day of a CronCal series, saved from the form opened on one
- * of them. The form shows that day, so its times are that day's: the series
- * moves by as much as the day did (lib/series-edit), never to the day itself,
- * which would drop every day before it. Its skipped and changed days move
- * with it, and a field set for all days is set on the changed days too.
+ * of them (`shown`, as the form showed it). The form shows that day, so its
+ * times are that day's: the series moves by as much as the day did
+ * (lib/series-edit), never to the day itself, which would drop every day
+ * before it. Its skipped and changed days move with it, and a field set for
+ * all days is set on the changed days too.
  */
 export async function applyRecurringSeriesEdit(
   baseEvent: CalendarEvent,
   occurrence: { start: Date; end: Date },
   updates: Omit<CalendarEvent, "id" | "created_at">,
-  shown: CalendarEvent,
-): Promise<CalendarMutationResult> {
-  const { data: overrideRows, error: overrideError } = await supabase
-    .from("calendar_events")
-    .select("*")
-    .eq("recurrence_parent_id", baseEvent.id);
-  if (overrideError) throw overrideError;
-  const overrides = (overrideRows as CalendarEvent[] | null) ?? [];
-
-  // No longer repeating: one event, where the form put it, and its changed days go with the series.
-  if (!updates.recurrence) {
-    const { error: childDeleteError } = await supabase
-      .from("calendar_events")
-      .delete()
-      .eq("recurrence_parent_id", baseEvent.id);
-    if (childDeleteError) throw childDeleteError;
-    return updateCalendarEvent(baseEvent.id, { ...updates, recurrence_exceptions: [], recurrence_until: null });
-  }
-
-  const carried = changedRowFields(updates, shown);
-  let seriesUpdates: Partial<Omit<CalendarEvent, "id" | "created_at">> = {
-    ...updates,
-    start_time: baseEvent.start_time,
-    end_time: baseEvent.end_time,
-    all_day: baseEvent.all_day,
-    timezone: baseEvent.timezone,
-  };
-  let rowUpdates = overrides.map((row) => ({ id: row.id, fields: carried as Partial<CalendarEvent> }));
-
-  if (dayTimesChanged(occurrence, baseEvent, updates)) {
-    const plan = planSeriesMove(baseEvent, occurrence, updates, overrides);
-    seriesUpdates = { ...updates, start_time: plan.start_time, end_time: plan.end_time, recurrence_exceptions: plan.recurrence_exceptions };
-    /*
-     * A changed day can move into the place another still holds, which the
-     * index of one row per place refuses. Moving later, the last goes first;
-     * moving earlier, the first does.
-     */
-    const later = new Date(plan.start_time).getTime() > new Date(baseEvent.start_time).getTime();
-    const placeMs = (row: { original_occurrence_start: string }) => new Date(row.original_occurrence_start).getTime();
-    rowUpdates = [...plan.overrides]
-      .sort((a, b) => (later ? placeMs(b) - placeMs(a) : placeMs(a) - placeMs(b)))
-      .map(({ id, ...place }) => ({ id, fields: { ...carried, ...place } }));
-  }
-
-  const result = await updateCalendarEvent(baseEvent.id, seriesUpdates);
-  for (const row of rowUpdates) {
-    if (Object.keys(row.fields).length === 0) continue;
-    const { error } = await supabase.from("calendar_events").update(row.fields).eq("id", row.id);
-    if (error) throw error;
-  }
-  return result;
+  shown: CalendarEvent = seriesDay(baseEvent, occurrence),
+): Promise<void> {
+  const plan = planAllDaysEdit(baseEvent, shown, updates, await readChangedDays(baseEvent.id));
+  const { error } = await supabase.rpc("croncal_change_series", {
+    p_series: baseEvent.id,
+    p_fields: rowFields(plan.fields),
+    p_days: dayUpdates(plan.days),
+    p_drop_days: plan.dropDays,
+  });
+  if (error) throw error;
 }
 
 /**
- * A change to a CronCal series from one day on: the series is split there.
- * The new series takes the day and every one after it, with the days skipped
- * or changed on their own after it (a changed day keeps its changes, on the
- * new series' matching day), and the old series ends the day before.
- *
- * In that order, so a failure loses nothing: if the new series can't be
- * made the old one is left whole, and if the old one can't be ended the new
- * one is taken back out, so no day shows twice. A new rule (weekly to daily)
- * starts with no skipped or changed days, since its days don't line up with
- * the old ones. From the first day, the old series has no days left and goes.
+ * A change to a CronCal series from one day on: the series is split there
+ * (lib/series-edit planFollowingEdit). `newSeriesId` names the new series, so
+ * the same save sent again finds it made rather than making a second.
  */
 export async function applyRecurringFollowingEdit(
   baseEvent: CalendarEvent,
   occurrence: { start: Date; end: Date },
   updates: Omit<CalendarEvent, "id" | "created_at">,
+  shown: CalendarEvent = seriesDay(baseEvent, occurrence),
+  newSeriesId: string = crypto.randomUUID(),
 ): Promise<void> {
-  const occurrenceIso = occurrence.start.toISOString();
-  const { before, fromPivot } = splitExceptionStarts(baseEvent.recurrence_exceptions, occurrenceIso);
-  const nextTimeZone = updates.timezone ?? baseEvent.timezone;
-  const sameRule = (updates.recurrence ?? baseEvent.recurrence) === baseEvent.recurrence;
-  const onNewSeries = (value: string) => mapOccurrenceStartToTimeZone(value, baseEvent.timezone, nextTimeZone, updates.start_time);
-
-  const { event: nextSeries } = await createCalendarEvent({
-    ...baseEvent,
-    ...updates,
-    recurrence: updates.recurrence ?? baseEvent.recurrence,
-    recurrence_until: baseEvent.recurrence_until ?? null,
-    recurrence_exceptions: sameRule ? fromPivot.map(onNewSeries) : [],
-    recurrence_parent_id: null,
-    original_occurrence_start: null,
-    google_event_id: null,
-    sync_to_google: false,
+  const plan = planFollowingEdit(baseEvent, occurrence, shown, updates, await readChangedDays(baseEvent.id));
+  const { error } = await supabase.rpc("croncal_split_series", {
+    p_series: baseEvent.id,
+    p_pivot: occurrence.start.toISOString(),
+    p_new: { ...rowFields(plan.next), id: newSeriesId },
+    p_days: dayUpdates(plan.days),
   });
-
-  const { error: baseError } = await supabase
-    .from("calendar_events")
-    .update({ recurrence_until: occurrenceIso, recurrence_exceptions: before })
-    .eq("id", baseEvent.id);
-  if (baseError) {
-    await supabase.from("calendar_events").delete().eq("id", nextSeries.id);
-    throw baseError;
-  }
-
-  const { data: laterDays, error: readError } = await supabase
-    .from("calendar_events")
-    .select("id, original_occurrence_start")
-    .eq("recurrence_parent_id", baseEvent.id)
-    .gte("original_occurrence_start", occurrenceIso);
-  if (readError) throw readError;
-  for (const day of (laterDays as { id: string; original_occurrence_start: string }[] | null) ?? []) {
-    const { error } = sameRule
-      ? await supabase
-        .from("calendar_events")
-        .update({ recurrence_parent_id: nextSeries.id, original_occurrence_start: onNewSeries(day.original_occurrence_start) })
-        .eq("id", day.id)
-      : await supabase.from("calendar_events").delete().eq("id", day.id);
-    if (error) throw error;
-  }
-
-  if (new Date(baseEvent.start_time).getTime() >= occurrence.start.getTime()) {
-    const { error } = await supabase.from("calendar_events").delete().eq("id", baseEvent.id);
-    if (error) throw error;
-  }
+  if (error) throw error;
 }
 
+/** One day of a CronCal series deleted: skipped, and its changed copy, if any, gone. */
 export async function deleteRecurringOccurrence(
   baseEvent: CalendarEvent,
   occurrence: { start: Date; end: Date },
 ): Promise<void> {
-  const occurrenceIso = occurrence.start.toISOString();
-  const nextExceptions = normalizeExceptionStarts([
-    ...(baseEvent.recurrence_exceptions ?? []),
-    occurrenceIso,
-  ]);
-
-  const { error: baseError } = await supabase
-    .from("calendar_events")
-    .update({ recurrence_exceptions: nextExceptions })
-    .eq("id", baseEvent.id);
-
-  if (baseError) {
-    throw baseError;
-  }
-
-  const { error: overrideDeleteError } = await supabase
-    .from("calendar_events")
-    .delete()
-    .eq("recurrence_parent_id", baseEvent.id)
-    .eq("original_occurrence_start", occurrenceIso);
-
-  if (overrideDeleteError) {
-    throw overrideDeleteError;
-  }
+  const { error } = await supabase.rpc("croncal_delete_day", {
+    p_series: baseEvent.id,
+    p_place: occurrence.start.toISOString(),
+  });
+  if (error) throw error;
 }
 
+/** A CronCal series from one day on deleted: it ends the day before, or, from its first day, goes. */
 export async function deleteRecurringFollowing(
   baseEvent: CalendarEvent,
   occurrence: { start: Date; end: Date },
 ): Promise<void> {
-  const occurrenceIso = occurrence.start.toISOString();
-  const { before } = splitExceptionStarts(baseEvent.recurrence_exceptions, occurrenceIso);
-
-  const { error } = await supabase
-    .from("calendar_events")
-    .update({
-      recurrence_until: occurrenceIso,
-      recurrence_exceptions: before,
-    })
-    .eq("id", baseEvent.id);
-
-  if (error) {
-    throw error;
-  }
-
-  const { error: overrideDeleteError } = await supabase
-    .from("calendar_events")
-    .delete()
-    .eq("recurrence_parent_id", baseEvent.id)
-    .gte("original_occurrence_start", occurrenceIso);
-
-  if (overrideDeleteError) {
-    throw overrideDeleteError;
-  }
+  const { error } = await supabase.rpc("croncal_delete_following", {
+    p_series: baseEvent.id,
+    p_pivot: occurrence.start.toISOString(),
+  });
+  if (error) throw error;
 }

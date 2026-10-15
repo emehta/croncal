@@ -8,6 +8,7 @@
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { ENV_NAMES } from "@/selfhost/env-names";
 
 const failures = [];
 let passed = 0;
@@ -16,10 +17,8 @@ function check(name, actual, expected) {
   else failures.push(`${name}\n  expected ${JSON.stringify(expected)}\n  got      ${JSON.stringify(actual)}`);
 }
 
-const ENV = [
-  "NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_PUBLISHABLE_KEY",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY", "VERCEL",
-];
+// Every name config.ts reads, so a developer's own environment can't reach the test.
+const ENV = [...Object.values(ENV_NAMES).flat(), "VERCEL"];
 for (const name of ENV) delete process.env[name];
 const dir = mkdtempSync(path.join(os.tmpdir(), "croncal-config-test-"));
 process.env.CRONCAL_DATA_DIR = dir;
@@ -55,6 +54,10 @@ try {
   write({ url: "abcdefghijklmnopqrst.supabase.co", publishableKey: "x", secretKey: "y" });
   await new Promise((resolve) => setTimeout(resolve, 20));
   check("a saved address with no scheme means connect again", await config.readAppConfig(), null);
+
+  write({ ...good, publishableKey: good.secretKey, secretKey: good.publishableKey });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  check("a saved file with the keys swapped is no config, so the secret never reaches a page", await config.readAppConfig(), null);
 
   await config.writeAppConfig(good);
   check("a saved config reads back", await config.readAppConfig(), good);
@@ -96,6 +99,29 @@ try {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "zyxwvutsrqponmlkjihg.supabase.co";
   check("a variable address with no scheme is named as wrong", config.environmentProblems()[0]?.includes("not an https address"), true);
   check("and gives no config", await config.readAppConfig(), null);
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://zyxwvutsrqponmlkjihg.supabase.co";
+
+  // ─── Each key in its own place ───
+  const jwt = (role) => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role })).toString("base64url")}.c2lnbmF0dXJl`;
+  check("the kinds are known by their form", ["sb_publishable_x", "sb_secret_x", jwt("anon"), jwt("service_role"), "something else"].map(config.keyKind),
+    ["publishable", "secret", "publishable", "secret", null]);
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_secret_env";
+  process.env.SUPABASE_SECRET_KEY = "sb_publishable_env";
+  check("a secret key where the page's key goes is named, and so is the reverse", config.environmentProblems(), [
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY holds a secret key. Put the publishable key there.",
+    "SUPABASE_SECRET_KEY holds the publishable key. Put the secret key there.",
+  ]);
+  check("and they are never used", await config.readAppConfig(), null);
+  delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = jwt("service_role");
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_env";
+  check("a service_role JWT in the anon key's variable is named by that variable", config.environmentProblems(), [
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY holds a secret key. Put the publishable key there.",
+  ]);
+  check("and is never used", await config.readAppConfig(), null);
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = jwt("anon");
+  check("an anon JWT there is fine", (await config.readAppConfig())?.publishableKey, jwt("anon"));
+  delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   delete process.env.SUPABASE_SECRET_KEY;

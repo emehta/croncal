@@ -1,0 +1,41 @@
+/* The on/off switch (ToggleRow): the event form's Sync to Google Calendar. */
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--cal-toggle-border, var(--c-border));
+  border-radius: var(--ui-radius-round);
+  background: var(--cal-toggle-off-bg, var(--c-border));
+  cursor: pointer;
+  transition: background var(--motion-base) var(--ease-out);
+}
+
+/* The switch is drawn 22px tall; the part that takes a press is 34px. */
+.switch::before {
+  content: "";
+  position: absolute;
+  inset: -7px -4px;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ui-radius-round);
+  background: var(--cal-toggle-knob, #fff);
+  transition: left var(--motion-base) var(--ease-out);
+}
+
+.switch[aria-checked="true"] .switchKnob {
+  left: 20px;
+}

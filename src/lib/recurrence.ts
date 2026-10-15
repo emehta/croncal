@@ -1,9 +1,13 @@
 import type { CalendarEvent } from "@/types/calendar-event";
 import { getTimeZoneParts, makeUtcDateFromParts, zonedDateTimeToUtc } from "@/lib/calendar-timezone";
-import { DAY_NAMES, MONTH_NAMES, ordinal, shiftDateStrByMonths } from "@/lib/date-utils";
+import { DAY_NAMES, MONTH_NAMES, daysBetweenDateStrs, ordinal, shiftDateStr, shiftDateStrByMonths } from "@/lib/date-utils";
 import { DEFAULT_ZONE } from "@/lib/google-recurrence";
 
 type RecurrenceOccurrence = { start: Date; end: Date };
+
+function datePart(parts: { year: number; month: number; day: number }): string {
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
 
 const recurrenceExpansionCache = new WeakMap<CalendarEvent, Map<string, RecurrenceOccurrence[]>>();
 
@@ -51,6 +55,16 @@ export function expandRecurrences(
   const seedParts = getTimeZoneParts(eventStart, timeZone);
   let cursor = { ...seedParts };
   const seedDayOfMonth = seedParts.day;
+
+  /*
+   * Each day ends at the series' own end on the clock, the same number of
+   * days after its start, rather than its length in hours later: across a
+   * daylight saving change the hours differ, and an all-day day (midnight to
+   * 23:59:59) measured in hours would end an hour into the next day.
+   */
+  const endParts = getTimeZoneParts(eventEnd, timeZone);
+  const endTimeStr = `${String(endParts.hour).padStart(2, "0")}:${String(endParts.minute).padStart(2, "0")}`;
+  const endDayOffset = daysBetweenDateStrs(datePart(seedParts), datePart(endParts));
 
   function advance(days: number) {
     const utcDate = makeUtcDateFromParts(cursor);
@@ -125,10 +139,11 @@ export function expandRecurrences(
   while (iterations < MAX) {
     iterations++;
 
-    const dateStr = `${cursor.year}-${String(cursor.month).padStart(2, "0")}-${String(cursor.day).padStart(2, "0")}`;
+    const dateStr = datePart(cursor);
     const timeStr = `${String(cursor.hour).padStart(2, "0")}:${String(cursor.minute).padStart(2, "0")}`;
     const occurrenceStart = zonedDateTimeToUtc(dateStr, timeStr, timeZone, cursor.second);
-    const computedEnd = new Date(occurrenceStart.getTime() + durationMs);
+    const wallEnd = zonedDateTimeToUtc(shiftDateStr(dateStr, endDayOffset), endTimeStr, timeZone, endParts.second);
+    const computedEnd = wallEnd < occurrenceStart ? occurrenceStart : wallEnd;
 
     if (recurrenceUntilMs !== null && occurrenceStart.getTime() >= recurrenceUntilMs) {
       stoppedInRange = false;

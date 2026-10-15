@@ -9,15 +9,19 @@
 import { zonedDateTimeToUtc } from "@/lib/calendar-timezone";
 import {
   buildGoogleCreateAttendees,
+  buildGoogleUpdateAttendees,
   googleCreateBody,
   googleEventTiming,
+  readGoogleEventChanges,
   readGoogleEventCreate,
+  readGuestList,
 } from "@/app/api/google-calendar/events/google-payload";
-import { createGoogleEvent } from "@/app/api/google-calendar/events/google-edit";
+import { createGoogleEvent, editGoogleEvent, splitSeriesId } from "@/app/api/google-calendar/events/google-edit";
 import { googleCreateFields } from "@/lib/google-event-changes";
 
 const failures = [];
 let passed = 0;
+const meetingTimes = { start: "2026-10-05T09:15:00.000Z", end: "2026-10-05T09:58:00.000Z" };
 function check(name, actual, expected) {
   if (JSON.stringify(actual) === JSON.stringify(expected)) { passed++; return; }
   failures.push(`${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
@@ -66,8 +70,46 @@ check("numbers are not times", googleEventTiming({ start_time: 1, end_time: 2, a
 
 // Attendees, which the create route builds alongside.
 check("attendees from names and emails", buildGoogleCreateAttendees("Ann <ann@x.com>, bob@y.com, not an email"),
-  [{ displayName: "Ann", email: "ann@x.com" }, { email: "bob@y.com" }]);
+  [{ email: "ann@x.com", displayName: "Ann" }, { email: "bob@y.com" }]);
 check("no attendees", buildGoogleCreateAttendees(""), undefined);
+
+/*
+ * A save that changes the guests. Google replaces the whole list with what it
+ * is sent, so a guest already there must go back as Google had them: their
+ * answer and whether they are optional, not just their address. And a name
+ * can hold a comma ("Lee, Ann"), which must not split one guest into two.
+ */
+const guests = [
+  { email: "ann@x.com", displayName: "Lee, Ann", responseStatus: "accepted", optional: true },
+  { email: "bob@y.com", responseStatus: "declined" },
+  { email: "room@r.com", displayName: "Room 1", resource: true },
+];
+check("the guests as the form shows them come back as Google had them, a new one added",
+  buildGoogleUpdateAttendees("Lee, Ann, bob@y.com, Room 1, new@z.com", guests),
+  [...guests, { email: "new@z.com" }]);
+check("a guest left out is removed, the rest keep their answers",
+  buildGoogleUpdateAttendees("Lee, Ann", guests), [guests[0]]);
+check("matched by address whatever its case, and once each",
+  buildGoogleUpdateAttendees("BOB@y.com, bob@y.com", guests), [guests[1]]);
+check("a new name with a comma in it is one guest",
+  readGuestList("Doe, John <john@x.com>, \"Smith, Jo\" <jo@x.com>"),
+  [{ email: "john@x.com", displayName: "Doe, John" }, { email: "jo@x.com", displayName: "Smith, Jo" }]);
+check("a name typed for a guest already there is taken, with their answer kept",
+  buildGoogleUpdateAttendees("Ann Lee <ann@x.com>", guests), [{ ...guests[0], displayName: "Ann Lee" }]);
+check("emptied, the guests go", buildGoogleUpdateAttendees("", guests), []);
+check("a line that names nobody leaves them as they are", buildGoogleUpdateAttendees("someone", guests), undefined);
+
+/* A change request, checked as a new event is. */
+check("a change reads back as itself", readGoogleEventChanges({ title: "A", importance: null, repeat: "weekly", link: null }),
+  { title: "A", link: null, importance: null, repeat: "weekly" });
+check("only the keys sent", readGoogleEventChanges({ googleEventId: "x", scope: "all", color: "#D50000" }), { color: "#D50000" });
+check("times go together, all four", readGoogleEventChanges({ start_time: meetingTimes.start, end_time: meetingTimes.end, all_day: false, timezone: "Asia/Singapore" }),
+  { start_time: meetingTimes.start, end_time: meetingTimes.end, all_day: false, timezone: "Asia/Singapore" });
+check("a start without the rest is refused", typeof readGoogleEventChanges({ start_time: meetingTimes.start }), "string");
+check("an end before the start is refused", typeof readGoogleEventChanges({ start_time: meetingTimes.end, end_time: meetingTimes.start, all_day: false, timezone: "UTC" }), "string");
+check("a title that is not text is refused", typeof readGoogleEventChanges({ title: 5 }), "string");
+check("a priority outside the three is refused, said as priority", readGoogleEventChanges({ importance: "urgent" }), "Priority must be low, medium or high.");
+check("a repeat the form does not offer is refused", typeof readGoogleEventChanges({ repeat: "hourly" }), "string");
 
 /* ── a new event, as Google is sent it ─────────────────────────────────── */
 
@@ -127,7 +169,7 @@ check("an empty description or location is left out, and a colour Google lacks i
   ["description" in sparse, "location" in sparse, "colorId" in sparse], [false, false, false]);
 check("a location and attendees go as Google spells them",
   (({ location, attendees }) => ({ location, attendees }))(googleCreateBody({ ...meeting, location: " Pool deck ", participants: "Sam <sam@example.com>" })),
-  { location: "Pool deck", attendees: [{ displayName: "Sam", email: "sam@example.com" }] });
+  { location: "Pool deck", attendees: [{ email: "sam@example.com", displayName: "Sam" }] });
 check("a blank title is still an event", googleCreateBody({ ...meeting, title: "  " }).summary, "(No title)");
 check("unusable times are refused", googleCreateBody({ ...meeting, end_time: "2026-10-05T09:00:00.000Z" }), null);
 
@@ -199,10 +241,81 @@ async function refusal(status, reason) {
     return [error.status, error.message];
   }
 }
-check("a dead grant says to reconnect", await refusal(401, "authError"), [401, "Reconnect Google Calendar in Settings to restore access."]);
+check("a dead grant says to reconnect", await refusal(401, "authError"), [401, "Reconnect Google Calendar in Settings."]);
 check("a refusal says Google would not let CronCal add it, not that someone else organises it",
   await refusal(403, "insufficientPermissions"), [403, "Google Calendar did not let CronCal add the event. Reconnect it in Settings."]);
 check("any other failure says the event was not added", await refusal(400, "invalid"), [502, "Google Calendar could not add the event. Try again in a moment."]);
+
+/* ── a series split from one day on, and its changed days put back ───────── */
+
+/*
+ * A stand-in for Google that answers by what is asked, not in a fixed order:
+ * a weekly series from Monday 5 Oct, 09:00 in Singapore, with two days
+ * changed on their own after the 19th.
+ */
+function seriesGoogle({ postAnswers = [[200]], refusePatchOf = [] } = {}) {
+  const calls = [];
+  const series = {
+    id: "series1", iCalUID: "series1@google.com", etag: "\"e1\"", status: "confirmed", summary: "Gym",
+    organizer: { self: true }, eventType: "default", recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=MO"],
+    start: { dateTime: "2026-10-05T01:00:00.000Z", timeZone: "Asia/Singapore" },
+    end: { dateTime: "2026-10-05T02:00:00.000Z", timeZone: "Asia/Singapore" },
+  };
+  const day = (date, extra = {}) => ({
+    ...series, id: `series1_${date.replaceAll("-", "")}T010000Z`, recurrence: undefined, recurringEventId: "series1",
+    originalStartTime: { dateTime: `${date}T01:00:00.000Z`, timeZone: "Asia/Singapore" },
+    start: { dateTime: `${date}T01:00:00.000Z`, timeZone: "Asia/Singapore" },
+    end: { dateTime: `${date}T02:00:00.000Z`, timeZone: "Asia/Singapore" }, ...extra,
+  });
+  const changed = [day("2026-10-26", { location: "Pool" }), day("2026-11-02", { location: "Park" })];
+  const fetchImpl = async (url, init) => {
+    const path = new URL(String(url)).pathname.replace("/calendar/v3/calendars/primary/events", "");
+    const body = init.body ? JSON.parse(init.body) : undefined;
+    calls.push({ method: init.method, path, body });
+    const answer = (status, value) => new Response(value === undefined ? "" : JSON.stringify(value), { status });
+    if (init.method === "GET" && path === "/series1") return answer(200, series);
+    if (init.method === "GET" && path === "/series1_20261019T010000Z") return answer(200, day("2026-10-19"));
+    if (init.method === "GET" && path === "") return answer(200, { items: changed });
+    if (init.method === "POST") {
+      const [status, value] = postAnswers.shift() ?? [200];
+      return answer(status, status === 200 ? { ...body, id: body.id } : value ?? { error: { errors: [{ reason: status === 409 ? "duplicate" : "backendError" }] } });
+    }
+    if (init.method === "PATCH" && refusePatchOf.some((id) => path.includes(id))) {
+      return answer(400, { error: { errors: [{ reason: "invalid" }] } });
+    }
+    return answer(200, { ...(body ?? {}), id: path.slice(1) });
+  };
+  return { calls, context: { accessToken: "test", fetchImpl } };
+}
+
+const pivotMs = Date.parse("2026-10-19T01:00:00.000Z");
+check("a split's new series has an id of its own, the same for the same split",
+  [splitSeriesId({ id: "series1", etag: "a" }, pivotMs) === splitSeriesId({ id: "series1", etag: "a" }, pivotMs), /^[0-9a-v]{32}$/.test(splitSeriesId({ id: "series1", etag: "a" }, pivotMs))], [true, true]);
+check("…and another once the series has changed, or for another day",
+  [splitSeriesId({ id: "series1", etag: "a" }, pivotMs) === splitSeriesId({ id: "series1", etag: "b" }, pivotMs),
+    splitSeriesId({ id: "series1", etag: "a" }, pivotMs) === splitSeriesId({ id: "series1", etag: "a" }, pivotMs + 7 * 86_400_000)], [false, false]);
+
+{
+  // Google makes the new series but answers 503; the retry is told it exists (409), and makes it this split's instead of adding a second.
+  const google = seriesGoogle({ postAnswers: [[503], [409]] });
+  const result = await editGoogleEvent(google.context, "series1_20261019T010000Z", "following", { title: "Gym, new" });
+  const posts = google.calls.filter((c) => c.method === "POST");
+  const put = google.calls.find((c) => c.method === "PUT");
+  check("a split retried after Google failed posts the same id again", posts.length === 2 && posts[0].body.id === posts[1].body.id && posts[0].body.id === splitSeriesId({ id: "series1", etag: "\"e1\"" }, pivotMs), true);
+  check("…and a 409 for it writes this split onto the one Google made", [put?.path, put?.body.status, put?.body.summary], [`/${posts[0].body.id}`, "confirmed", "Gym, new"]);
+  check("…then ends the old series and puts the changed days back on the new one",
+    [google.calls.some((c) => c.method === "PATCH" && c.path === "/series1" && /UNTIL=/.test(c.body.recurrence[0])), google.calls.filter((c) => c.method === "PATCH" && c.path.startsWith(`/${posts[0].body.id}_`)).length, result.notCarried],
+    [true, 2, 0]);
+}
+
+{
+  // Google refuses one changed day: it is counted, the next is still put back, and the save stands.
+  const google = seriesGoogle({ refusePatchOf: ["20261026"] });
+  let outcome;
+  try { outcome = await editGoogleEvent(google.context, "series1_20261019T010000Z", "following", { title: "Gym, new" }); } catch (error) { outcome = String(error); }
+  check("a changed day Google refuses is counted, and the save does not fail", outcome, { notCarried: 1 });
+  check("…and the day after it is still put back", google.calls.some((c) => c.method === "PATCH" && c.path.endsWith("_20261102T010000Z")), true);
+}
 
 if (failures.length) {
   console.error(failures.join("\n"));

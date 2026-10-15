@@ -8,8 +8,8 @@
  * needs no stylesheet at all, and takes them off again once the page has
  * loaded.
  *
- * They are copies of `--page-bg` for each app theme and `--public-bg` for each
- * public one, because a script that runs before the CSS cannot read the CSS.
+ * They are copies of `--page-bg` for each theme, because a script that runs
+ * before the CSS cannot read the CSS.
  * `npm test -- first-paint` fails if a copy stops matching `globals.css`.
  */
 
@@ -25,12 +25,3 @@ export const APP_FIRST_PAINT: Record<string, string> = {
   oxblood: "#280b11",
   paper: "#efe4cc",
 };
-
-/** `--public-bg`, keyed by `data-public-theme`; light is the absence of one. */
-export const PUBLIC_FIRST_PAINT: Record<string, string> = {
-  light: "#ffffff",
-  dark: "#1c1c1c",
-};
-
-/** Public pages, by path, that open in a theme of their own whatever the visitor chose elsewhere. */
-export const PUBLIC_PAGE_THEMES: Readonly<Record<string, "light" | "dark">> = { "/social": "dark" };

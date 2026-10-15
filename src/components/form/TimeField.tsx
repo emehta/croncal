@@ -70,7 +70,8 @@ export function TimeList({
           id={inputId}
           autoFocus={autoFocusInput}
           value={typed}
-          placeholder={format === "24h" ? "Type a time, 21:30" : "Type a time, 9:30pm"}
+          placeholder={format === "24h" ? "21:30" : "9:30 PM"}
+          aria-invalid={typedInvalid || undefined}
           onChange={(e) => { setTyped(e.target.value); setTypedInvalid(false); }}
           onKeyDown={(e) => {
             if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
@@ -121,6 +122,7 @@ export default function TimeField({
   placeholder = "Time",
   clearable = false,
   showIcon = true,
+  invalid = false,
 }: {
   /** "HH:MM", or null. */
   value: string | null;
@@ -129,6 +131,8 @@ export default function TimeField({
   placeholder?: string;
   clearable?: boolean;
   showIcon?: boolean;
+  /** The form found a problem with this time: its edge goes red, and the form says why beside it. */
+  invalid?: boolean;
 }) {
   const format = useTimeFormat();
   const [open, setOpen] = useState(false);
@@ -150,6 +154,7 @@ export default function TimeField({
         className={`${styles.field} ${styles.trigger}`}
         aria-haspopup="dialog"
         aria-expanded={open}
+        data-invalid={invalid ? "true" : undefined}
         aria-label={`${ariaLabel}: ${shown ?? placeholder}`}
         onClick={() => {
           setMenuWidth(Math.max(200, triggerRef.current?.offsetWidth ?? 200));

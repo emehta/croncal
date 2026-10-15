@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGoogleRedirectUri, handleRouteError } from "@/lib/api-route-utils";
+import { fail } from "@/selfhost/http";
 import { signValue } from "@/lib/crypto-utils";
 import { GOOGLE_EVENTS_SCOPE } from "@/lib/google-auth";
-import { AuthAccessError } from "@/lib/owner";
+import { requireAuthenticatedRequest } from "@/lib/owner";
 import { cookieSecret, readGoogleClient } from "@/selfhost/google-client";
-import { requireOwner } from "@/selfhost/owner";
-import { SetupError } from "@/selfhost/server";
 import { googleEndpoints } from "@/lib/google-endpoints";
 
 export const dynamic = "force-dynamic";
@@ -17,22 +16,12 @@ export const dynamic = "force-dynamic";
  * prefetch never starts one.
  */
 export async function GET(request: NextRequest) {
-  if (request.nextUrl.searchParams.get("connect") !== "true") {
-    return NextResponse.json({ error: "Connect Google Calendar from Settings." }, { status: 400 });
-  }
+  if (request.nextUrl.searchParams.get("connect") !== "true") return fail("Connect Google Calendar from Settings.");
 
   try {
-    let owner;
-    try {
-      owner = await requireOwner(request);
-    } catch (error) {
-      if (error instanceof SetupError) throw new AuthAccessError(error.message, error.status);
-      throw error;
-    }
+    const owner = await requireAuthenticatedRequest(request);
     const client = await readGoogleClient(owner);
-    if (!client) {
-      return NextResponse.json({ error: "Add your Google client ID and secret in Settings first." }, { status: 409 });
-    }
+    if (!client) return fail("Add your Google client ID and secret in Settings first.", 409);
 
     const state = crypto.randomUUID();
     const params = new URLSearchParams({

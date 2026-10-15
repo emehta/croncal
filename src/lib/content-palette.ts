@@ -235,12 +235,6 @@ export function contentFill(color: string): string {
   return key ? `var(--pal-fill-${key}, ${legibleFill(color)})` : color;
 }
 
-/** The colour a theme paints `color` as, for code that needs the value itself. */
-export function paletteColor(color: string, theme: ThemeValue): string {
-  const key = paletteKey(color);
-  return (key && CONTENT_PALETTES[theme]?.[`#${key}`]) || color;
-}
-
 /** The colours a title is drawn on: the events' (a selected one). */
 const INKED: readonly string[] = CONTENT_SOURCES.google;
 

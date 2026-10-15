@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, readJsonObject, requireGoogleAccessToken } from "@/lib/api-route-utils";
+import { requireGoogleAccessToken } from "@/lib/api-route-utils";
+import { fail, readObject } from "@/selfhost/http";
 import { GoogleEditError, deleteGoogleEvent } from "@/app/api/google-calendar/events/google-edit";
 import type { RecurrenceEditScope } from "@/types/calendar-event";
 
@@ -12,13 +13,13 @@ export async function DELETE(request: NextRequest) {
   const auth = await requireGoogleAccessToken(request);
   if (!auth.ok) return auth.response;
 
-  const body = await readJsonObject(request);
+  const body = await readObject(request);
   const googleEventId = body?.googleEventId;
   if (typeof googleEventId !== "string" || !googleEventId) {
-    return badRequest("Missing googleEventId");
+    return fail("Missing googleEventId");
   }
   const scope = (body?.scope ?? "single") as RecurrenceEditScope;
-  if (!SCOPES.includes(scope)) return badRequest("scope must be single, following or all.");
+  if (!SCOPES.includes(scope)) return fail("scope must be single, following or all.");
 
   try {
     await deleteGoogleEvent({ accessToken: auth.accessToken }, googleEventId, scope);

@@ -8,7 +8,7 @@ A calendar with repeats, drag to move and two-way Google Calendar sync. It runs 
 - **Drag** an event to another time or day, and drag across empty time to make one.
 - **Repeats** every day, weekday, week, two weeks, month or year. Change one day, that day and the ones after it, or all of them.
 - **Time zones**: each event keeps its own, and shows in yours.
-- **Colours, a type and an importance** on every event, and its link, place and people.
+- **Colours, a type and a priority** on every event, and its link, place and people.
 - **Google Calendar**, both ways: your Google events show beside CronCal's, and changes go back to Google.
 - **Nine themes**, and it works on a phone.
 
@@ -20,9 +20,13 @@ You need a Mac, Windows or Linux computer, [Node.js](https://nodejs.org) (the LT
 
 On Windows, leave Node's "Automatically install the necessary tools" box unticked: CronCal doesn't need them.
 
+### With publik
+
+Open [CronCal on publik](https://publikhq.com/croncal) and follow its steps.
+
 ### Download
 
-Paste one line into **Terminal** (Mac or Linux) or **Command Prompt** (Windows, not PowerShell). It makes a `croncal` folder where you are, and opens CronCal in your browser a few seconds later.
+Paste one line into **Terminal** (Mac or Linux) or **Command Prompt** (Windows: press Start, type `cmd`, press Enter; not PowerShell). It makes a `croncal` folder where you are, and opens CronCal in your browser a few seconds later.
 
 Mac and Linux:
 
@@ -58,7 +62,7 @@ CronCal's first screen, **Set up CronCal**, walks you through it:
 
 Already use [Todoer](https://github.com/emehta/todoer)? Give CronCal the same project: after step 4 it asks you to sign in with your Todoer account instead of making one.
 
-Then switch off sign-ups, so the project stays yours: in Supabase, **Authentication**, **Sign In / Providers**, switch off **Allow new users to sign up**, then **Save changes**. Strangers could see none of your events anyway; Settings shows a reminder until it's off.
+Then switch off sign-ups, so the project stays yours: in Supabase, **Authentication**, **Sign In / Providers**, switch off **Allow new users to sign up**, then **Save changes**. Strangers could see none of your events anyway; Settings reminds you until it's off.
 
 Leave **Enable Data API** on (**Integrations**, **Data API**): CronCal talks to your project through it.
 
@@ -75,9 +79,9 @@ CronCal connects through a Google Cloud client of your own, so no one else's app
 1. **Make a project.** Open the project picker at the top, press **New project**, name it CronCal, and press **Create**. Make sure it's the project selected.
 2. **Turn on the Calendar API.** Search the console for **Google Calendar API**, open it, and press **Enable**.
 3. **Name the app.** In the menu, open **Google Auth platform**, then **Branding**. If it says **Google Auth platform not configured yet**, press **Get started**: App name CronCal, your email as the support and contact email, **External** under Audience, then agree to the policy and press **Create**.
-4. **Publish it,** so the connection doesn't end after seven days: open **Audience** and press **Publish app**. Only you will use it, so it needs no review.
+4. **Publish it,** so the connection doesn't end after seven days: open **Audience**, press **Publish app**, then **Confirm**. Only you will use it, so it needs no review.
 5. **Make the client.** Open **Clients**, press **Create client**, choose **Web application**, and under **Authorized redirect URIs** press **Add URI** and paste `http://localhost:3102/api/auth/google/callback` (CronCal's Settings shows it, ready to copy). Press **Create**, and keep the window with the **Client ID** and **Client secret** open.
-6. **Connect.** In CronCal, open **Settings**, paste both under **Google Calendar**, press **Save**, then **Connect**. Choose your account. Google says it hasn't verified the app, because it's yours rather than a published one: press **Advanced**, then go on to CronCal, tick calendar access, and continue.
+6. **Connect.** In CronCal, open **Settings**, paste both under **Google Calendar**, press **Save**, then **Connect**. Choose your account. Google says it hasn't verified the app, because it hasn't been through Google's review: press **Advanced**, then go on to CronCal, tick calendar access, and continue.
 
 Your Google events then show beside CronCal's, with an eye in the sidebar to hide them. With **Sync to Google Calendar** on in its form, a new event goes into Google Calendar instead of CronCal.
 
@@ -98,7 +102,7 @@ To open it like an app: Safari's **File → Add to Dock**, or Chrome's **Install
 Close CronCal's window first. Your events and settings are kept.
 
 - **Downloaded:** delete the `croncal` folder (`rm -rf croncal` on Mac or Linux, `rmdir /s /q croncal` on Windows), then run the download line again.
-- **With Git:** in the `croncal` folder, run `git checkout main && git pull && npm install && npm start`.
+- **With publik or Git:** in the `croncal` folder, in Terminal (Command Prompt on Windows), run `git checkout main && git pull && npm install && npm start`.
 
 If an update changes the tables, CronCal asks you to run the setup again. Nothing is lost.
 
@@ -106,17 +110,17 @@ If an update changes the tables, CronCal asks you to run the setup again. Nothin
 
 - **"Supabase isn't answering":** check you're online, and that the project isn't [paused](#your-data).
 - **"Another program is using port 3102":** start on another port with `npm start -- --port 3106`. Google's redirect URI must then use that port too.
-- **Google says "redirect_uri_mismatch":** the URI in step 5 must match the one in CronCal's Settings exactly.
+- **Google says "redirect_uri_mismatch":** the client's redirect URI in Google Cloud must be exactly the one CronCal's Settings shows, `http://localhost:3102/api/auth/google/callback` unless you changed the port.
 - **Forgot your password:** press **Forgot password?** on the sign-in screen and paste your project's secret key.
 - **Windows says npm isn't recognised:** open a new Command Prompt after installing Node.
 - **PowerShell says "running scripts is disabled":** use Command Prompt, or type `npm.cmd` for `npm`.
 
 ## Remove it
 
-1. Delete the `croncal` folder, and the settings folder [above](#connect-supabase).
-2. If you added it like an app: delete Safari's from the **Applications** folder in your home folder, or open Chrome's and choose **Uninstall CronCal** from its ⋮ menu.
-3. If you connected Google: in Settings press **Disconnect** first, and delete the Google Cloud project if you made one only for CronCal.
-4. If you're done with Supabase, delete the project there.
+1. If you connected Google: in Settings press **Disconnect**, and delete the Google Cloud project if you made one only for CronCal.
+2. Delete the `croncal` folder, and the settings folder [above](#connect-supabase).
+3. If you added it like an app: delete Safari's from the **Applications** folder in your home folder, or open Chrome's and choose **Uninstall CronCal** from its ⋮ menu.
+4. If you're done with Supabase, and Todoer doesn't use the same project, delete the project there.
 
 ## Licence
 

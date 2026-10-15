@@ -5,10 +5,12 @@ import {
   dayWindow,
   formatWindowLabel,
   formatWindowLabelShort,
+  stepDate,
   weekBadge,
   windowMonth,
   type DayWindow,
 } from "@/lib/calendar-range";
+import Tooltip from "@/components/Tooltip";
 import { MONTH_NAMES, MONTHS_SHORT } from "@/lib/date-utils";
 import { usePhone } from "@/lib/use-viewport-width";
 import { CALENDAR_COLUMN_GAP, CALENDAR_SIDEBAR_WIDTH, PAGE_HEADER_GAP, PAGE_HEADER_HEIGHT, SELECTED } from "@/lib/styles";
@@ -36,13 +38,12 @@ const VIEWS: { value: "day" | "week" | "month"; label: string }[] = [
   { value: "month", label: "Month" },
 ];
 
-function navigate(view: "day" | "week" | "month", date: Date, dir: -1 | 1): Date {
-  const d = new Date(date);
-  if (view === "day") d.setDate(d.getDate() + dir);
-  else if (view === "week") d.setDate(d.getDate() + dir * 7);
-  else d.setMonth(d.getMonth() + dir);
-  return d;
-}
+/** What the arrows say they do, aloud and on hover alike. */
+const STEP_LABELS = {
+  day: ["Previous day", "Next day"],
+  week: ["Previous week", "Next week"],
+  month: ["Previous month", "Next month"],
+} as const;
 
 /*
  * Sized to the page header row, not to its contents.
@@ -231,15 +232,17 @@ export default function CalendarHeader({
           )}
           {/* Nav arrows + Today, flush with the card's right edge */}
           <div style={{ ...NAV_CONTAINER, flexShrink: 0 }}>
-            <button
-              type="button"
-              className="ui-hover-text"
-              style={ICON_BTN}
-              onClick={() => onDateChange(navigate(view, currentDate, -1))}
-              aria-label="Previous"
-            >
-              <CaretLeft size={14} weight="bold" />
-            </button>
+            <Tooltip label={STEP_LABELS[view][0]}>
+              <button
+                type="button"
+                className="ui-hover-text"
+                style={ICON_BTN}
+                onClick={() => onDateChange(stepDate(view, currentDate, -1))}
+                aria-label={STEP_LABELS[view][0]}
+              >
+                <CaretLeft size={14} weight="bold" aria-hidden="true" />
+              </button>
+            </Tooltip>
 
             <button
               type="button"
@@ -250,15 +253,17 @@ export default function CalendarHeader({
               Today
             </button>
 
-            <button
-              type="button"
-              className="ui-hover-text"
-              style={ICON_BTN}
-              onClick={() => onDateChange(navigate(view, currentDate, 1))}
-              aria-label="Next"
-            >
-              <CaretRight size={14} weight="bold" />
-            </button>
+            <Tooltip label={STEP_LABELS[view][1]}>
+              <button
+                type="button"
+                className="ui-hover-text"
+                style={ICON_BTN}
+                onClick={() => onDateChange(stepDate(view, currentDate, 1))}
+                aria-label={STEP_LABELS[view][1]}
+              >
+                <CaretRight size={14} weight="bold" aria-hidden="true" />
+              </button>
+            </Tooltip>
           </div>
           </div>
         </div>
@@ -405,10 +410,10 @@ function PhoneCalendarHeader({
               type="button"
               className="ui-hover-text"
               style={PHONE_ICON_BTN}
-              onClick={() => onDateChange(navigate(view, currentDate, -1))}
-              aria-label="Previous"
+              onClick={() => onDateChange(stepDate(view, currentDate, -1))}
+              aria-label={STEP_LABELS[view][0]}
             >
-              <CaretLeft size={14} weight="bold" />
+              <CaretLeft size={14} weight="bold" aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -422,10 +427,10 @@ function PhoneCalendarHeader({
               type="button"
               className="ui-hover-text"
               style={PHONE_ICON_BTN}
-              onClick={() => onDateChange(navigate(view, currentDate, 1))}
-              aria-label="Next"
+              onClick={() => onDateChange(stepDate(view, currentDate, 1))}
+              aria-label={STEP_LABELS[view][1]}
             >
-              <CaretRight size={14} weight="bold" />
+              <CaretRight size={14} weight="bold" aria-hidden="true" />
             </button>
           </div>
           {onNewEvent && (
@@ -434,7 +439,6 @@ function PhoneCalendarHeader({
               className="ui-hover-opacity-soft"
               onClick={onNewEvent}
               aria-label="Add event"
-              title="Add event"
               style={{
                 width: PHONE_NAV_HEIGHT,
                 height: PHONE_NAV_HEIGHT,
@@ -451,7 +455,7 @@ function PhoneCalendarHeader({
                 transition: "opacity var(--motion-base) var(--ease-out)",
               }}
             >
-              <Plus size={18} weight="bold" />
+              <Plus size={18} weight="bold" aria-hidden="true" />
             </button>
           )}
         </div>

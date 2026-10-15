@@ -165,7 +165,9 @@ export default function Tooltip({
            flash on tap and cover the thing you just pressed. */
         onPointerEnter={(event) => { if (event.pointerType === "mouse") setOpen(true); }}
         onPointerLeave={close}
-        onFocus={() => setOpen(true)}
+        /* Keyboard focus only: a click focuses a button too, and the bubble
+           would then sit over whatever the click opened. */
+        onFocus={(event) => { if ((event.target as Element).matches(":focus-visible")) setOpen(true); }}
         onBlur={close}
         /* Once you have clicked you know what it does, and the bubble would
            otherwise sit over whatever the click just opened. */

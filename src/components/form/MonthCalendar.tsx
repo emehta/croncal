@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react";
-import { MONTH_NAMES, fromDateStr, toDateStr } from "@/lib/date-utils";
+import Tooltip from "@/components/Tooltip";
+import { DAY_NAMES, MONTH_NAMES, fromDateStr, toDateStr } from "@/lib/date-utils";
 import { orderWeekdays, useWeekStart, type WeekStartPreference } from "@/lib/week-start";
 import styles from "./form.module.css";
 
@@ -21,15 +22,8 @@ export function getCalendarDays(year: number, month: number, weekStart: WeekStar
   return days;
 }
 
-const WEEKDAYS = [
-  { short: "S", full: "Sunday" },
-  { short: "M", full: "Monday" },
-  { short: "T", full: "Tuesday" },
-  { short: "W", full: "Wednesday" },
-  { short: "T", full: "Thursday" },
-  { short: "F", full: "Friday" },
-  { short: "S", full: "Saturday" },
-];
+/** The column heads: each day's first letter, the one way weekdays are lettered in both apps. */
+export const WEEKDAYS = DAY_NAMES.map((full) => ({ short: full[0], full }));
 
 /**
  * A month of days to pick from, in the week order the owner set. The same
@@ -64,15 +58,19 @@ export default function MonthCalendar({
   return (
     <div className={styles.calendar}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <button type="button" className={styles.navButton} onClick={() => shift(-1)} aria-label="Previous month">
-          <CaretLeft size={14} />
-        </button>
+        <Tooltip label="Previous month">
+          <button type="button" className={styles.navButton} onClick={() => shift(-1)} aria-label="Previous month">
+            <CaretLeft size={14} aria-hidden="true" />
+          </button>
+        </Tooltip>
         <span style={{ fontSize: "var(--ui-type-body-sm)", fontWeight: 600, color: "var(--c-text-1)" }}>
           {MONTH_NAMES[viewMonth]} {viewYear}
         </span>
-        <button type="button" className={styles.navButton} onClick={() => shift(1)} aria-label="Next month">
-          <CaretRight size={14} />
-        </button>
+        <Tooltip label="Next month">
+          <button type="button" className={styles.navButton} onClick={() => shift(1)} aria-label="Next month">
+            <CaretRight size={14} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 2 }}>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowSquareOut, Check, Copy, GoogleLogo } from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Copy, GoogleLogo } from "@phosphor-icons/react";
+import ExternalLink from "@/components/ExternalLink";
 import { SettingsRow, settingsNote } from "@/components/SettingsControls";
 import StatusBanner from "@/components/StatusBanner";
 import Tooltip from "@/components/Tooltip";
@@ -40,15 +41,6 @@ const putClient = (body: Record<string, unknown>) =>
   readJson<ClientStatus>("/api/google/client", { method: "PUT", headers: json, body: JSON.stringify(body) });
 
 const COPIED_FOR_MS = 2000;
-
-function Link({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--c-accent)", fontWeight: 600 }}>
-      {children}
-      <ArrowSquareOut size={13} weight="bold" aria-hidden="true" />
-    </a>
-  );
-}
 
 const row = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } as const;
 
@@ -126,17 +118,19 @@ export default function GoogleSettings() {
   const copyRedirect = () => {
     if (!client) return;
     setCopyRefused(false);
-    navigator.clipboard.writeText(client.redirectUri).then(
-      () => setCopied(true),
-      () => {
-        // Refused: the address is selected for a copy by hand.
-        const range = document.createRange();
-        if (redirectRef.current) range.selectNodeContents(redirectRef.current);
-        window.getSelection()?.removeAllRanges();
-        window.getSelection()?.addRange(range);
-        setCopyRefused(true);
-      },
-    );
+    // No clipboard (an older browser, or a page that isn't secure), or one that refused: the address is selected to copy by hand.
+    const refused = () => {
+      const range = document.createRange();
+      if (redirectRef.current) range.selectNodeContents(redirectRef.current);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      setCopyRefused(true);
+    };
+    if (!navigator.clipboard?.writeText) {
+      refused();
+      return;
+    }
+    navigator.clipboard.writeText(client.redirectUri).then(() => setCopied(true), refused);
   };
 
   if (!client) {
@@ -162,6 +156,22 @@ export default function GoogleSettings() {
       : google?.needsReconnect
         ? "Connection ended"
         : "Not connected";
+
+  /* Shown while setting up, and again once saved until connected: a
+     redirect_uri_mismatch from Google is fixed by comparing with it. */
+  const redirectUri = (
+    <>
+      <span style={{ ...row, marginTop: 4 }}>
+        <code ref={redirectRef} style={{ color: "var(--c-text-2)", overflowWrap: "anywhere" }}>{client.redirectUri}</code>
+        <Tooltip label={copied ? "Copied" : "Copy"}>
+          <DialogButton variant="ghost" onClick={copyRedirect} aria-label={copied ? "Copied" : "Copy"}>
+            {copied ? <Check size={15} weight="bold" aria-hidden="true" /> : <Copy size={15} weight="bold" aria-hidden="true" />}
+          </DialogButton>
+        </Tooltip>
+      </span>
+      {copyRefused && <span style={{ display: "block" }}>Your browser didn&apos;t allow copying. The address is selected: copy it by hand.</span>}
+    </>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 8 }}>
@@ -195,19 +205,11 @@ export default function GoogleSettings() {
           style={{ display: "flex", flexDirection: "column", gap: 8 }}
         >
           <ol style={{ ...settingsNote, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 18, listStyle: "decimal" }}>
-            <li>Turn on the Google Calendar API. <Link href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com">Open it</Link></li>
-            <li>In Google Auth platform, choose External, then press Publish app. <Link href="https://console.cloud.google.com/auth/audience">Open Audience</Link></li>
+            <li>In a Google Cloud project, turn on the Google Calendar API. <ExternalLink href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com">Open it</ExternalLink></li>
+            <li>In Google Auth platform, press Get started (External under Audience), then Publish app on Audience. <ExternalLink href="https://console.cloud.google.com/auth/audience">Open Audience</ExternalLink></li>
             <li>
-              Make a Web application client with this redirect URI. <Link href="https://console.cloud.google.com/auth/clients">Open Clients</Link>
-              <span style={{ ...row, marginTop: 4 }}>
-                <code ref={redirectRef} style={{ color: "var(--c-text-2)", overflowWrap: "anywhere" }}>{client.redirectUri}</code>
-                <Tooltip label={copied ? "Copied" : "Copy"}>
-                  <DialogButton variant="ghost" onClick={copyRedirect} aria-label="Copy the redirect URI">
-                    {copied ? <Check size={15} weight="bold" aria-hidden="true" /> : <Copy size={15} weight="bold" aria-hidden="true" />}
-                  </DialogButton>
-                </Tooltip>
-              </span>
-              {copyRefused && <span style={{ display: "block" }}>Your browser didn&apos;t allow copying. The address is selected: copy it by hand.</span>}
+              Make a Web application client with this redirect URI. <ExternalLink href="https://console.cloud.google.com/auth/clients">Open Clients</ExternalLink>
+              {redirectUri}
             </li>
             <li>Paste its ID and secret.</li>
           </ol>
@@ -225,6 +227,10 @@ export default function GoogleSettings() {
 
       {client.saved && !connected && (
         <p style={settingsNote}>Google will say it hasn&apos;t verified the app: it&apos;s your own. Press Advanced, then go on to CronCal.</p>
+      )}
+
+      {client.saved && !connected && (
+        <div style={settingsNote}>Redirect URI{redirectUri}</div>
       )}
 
       {client.saved && !connected && !client.fromEnvironment && (

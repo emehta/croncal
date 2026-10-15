@@ -2,27 +2,40 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowSquareOut, Check, Copy } from "@phosphor-icons/react";
+import ExternalLink from "@/components/ExternalLink";
+import LoadingState from "@/components/LoadingState";
 import StatusBanner from "@/components/StatusBanner";
 import { DialogButton } from "@/components/form/Dialog";
 import { FieldGroup, FieldStack, TextField } from "@/components/form/fields";
-import { getErrorMessage } from "@/lib/error-utils";
+import { OFFLINE_MESSAGE, getErrorMessage } from "@/lib/error-utils";
 import { supabase } from "@/lib/supabase";
 import { APP_NAME, ITEMS } from "@/selfhost/constants";
 import { dashboardLinks, projectRef } from "@/selfhost/keys";
 
 /**
- * The screens between a fresh copy and the task list: connect a Supabase
+ * The screens between a fresh copy and the app itself: connect a Supabase
  * project, give it the tables, make the one account, sign in. Each says what
  * to do in a line, and links to the exact page of the user's own project
  * where it is done.
  */
 
+/* Longer than the server gives Supabase (the connect route's deadline is 25
+   seconds), so its own answer arrives first when there is one. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 async function postJson(url: string, body: Record<string, unknown>): Promise<void> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (failure) {
+    if (failure instanceof DOMException && failure.name === "TimeoutError") throw new Error("That took too long. Try again.");
+    throw failure;
+  }
   const answer = (await response.json().catch(() => ({}))) as { error?: string };
   if (!response.ok) throw new Error(answer.error ?? `The request failed (${response.status}).`);
 }
@@ -47,20 +60,6 @@ function Frame({ title, intro, children }: { title: string; intro?: ReactNode; c
   );
 }
 
-function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--c-accent)", fontWeight: 600 }}
-    >
-      {children}
-      <ArrowSquareOut size={15} weight="bold" aria-hidden="true" />
-    </a>
-  );
-}
-
 function Steps({ children }: { children: ReactNode }) {
   return <ol style={{ display: "flex", flexDirection: "column", gap: 10, paddingLeft: 20, listStyle: "decimal", lineHeight: 1.55 }}>{children}</ol>;
 }
@@ -71,27 +70,27 @@ function Actions({ children }: { children: ReactNode }) {
 
 export function LoadingScreen() {
   return (
-    <div role="status" aria-live="polite" style={{ flex: "1 1 auto", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--c-text-3)" }}>
-      Loading…
+    <div style={{ flex: "1 1 auto", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <LoadingState />
     </div>
   );
 }
 
 /**
- * `first`: a new copy. `rejected`: the saved keys stopped working (reset).
- * `switch`: the owner chose another project, from a project that no longer
- * answers; `onCancel` goes back.
+ * `first`: a new copy. `rejected`: the saved keys stopped working (reset in
+ * Supabase), so the same project's new ones are asked for: the server takes
+ * no other project once one is saved (README, "Another project").
  */
 export function ConnectScreen({
   mode,
+  projectRefValue = null,
   onConnected,
-  onCancel,
 }: {
-  mode: "first" | "rejected" | "switch";
+  mode: "first" | "rejected";
+  projectRefValue?: string | null;
   onConnected: () => void;
-  onCancel?: () => void;
 }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(mode === "rejected" && projectRefValue ? `https://${projectRefValue}.supabase.co` : "");
   const [publishableKey, setPublishableKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -114,12 +113,10 @@ export function ConnectScreen({
 
   return (
     <Frame
-      title={mode === "rejected" ? "Connect your project again" : mode === "switch" ? "Connect a different project" : `Set up ${APP_NAME}`}
+      title={mode === "rejected" ? "Connect your project again" : `Set up ${APP_NAME}`}
       intro={
         mode === "rejected" ? (
           <p>Supabase no longer accepts the saved keys. Paste your project&apos;s current ones.</p>
-        ) : mode === "switch" ? (
-          <p>Paste the other project&apos;s URL and keys. Your {ITEMS} stay in the old one.</p>
         ) : (
           <p>Your {ITEMS} live in your own Supabase project.</p>
         )
@@ -151,11 +148,6 @@ export function ConnectScreen({
             <DialogButton type="submit" variant="primary" busy={busy} disabled={busy}>
               {busy ? "Checking…" : "Connect"}
             </DialogButton>
-            {onCancel && (
-              <DialogButton variant="ghost" onClick={onCancel} disabled={busy}>
-                Back
-              </DialogButton>
-            )}
           </Actions>
           <p style={{ color: "var(--c-text-3)", fontSize: "var(--ui-type-label)", lineHeight: 1.5 }}>The secret key is saved on this computer only.</p>
         </FieldStack>
@@ -206,14 +198,16 @@ export function DatabaseScreen({
   function copy() {
     if (!sql) return;
     setCopyNote(null);
-    navigator.clipboard.writeText(sql).then(
-      () => setCopied(true),
-      () => {
-        // The clipboard was refused: the setup is shown to copy by hand instead.
-        setShowing(true);
-        setCopyNote("Your browser didn't allow copying. Select the setup below and copy it.");
-      },
-    );
+    // No clipboard (an older browser, or a page that isn't secure), or one that refused: shown to copy by hand.
+    const refused = () => {
+      setShowing(true);
+      setCopyNote("Your browser didn't allow copying. Select the setup below and copy it.");
+    };
+    if (!navigator.clipboard?.writeText) {
+      refused();
+      return;
+    }
+    navigator.clipboard.writeText(sql).then(() => setCopied(true), refused);
   }
 
   async function check() {
@@ -237,7 +231,7 @@ export function DatabaseScreen({
         <li>Copy the setup.</li>
         <li>
           Paste it in your project&apos;s SQL Editor and press Run.{" "}
-          {links && <ExternalLink href={links.sqlEditor}>Open the SQL Editor</ExternalLink>}
+          {links && <ExternalLink href={links.sqlEditor}>Open SQL Editor</ExternalLink>}
         </li>
         <li>Come back and press Check again.</li>
       </Steps>
@@ -452,7 +446,6 @@ export function ProblemScreen({
   message,
   projectRefValue,
   onRetry,
-  onSwitch,
   busy = false,
 }: {
   kind: "paused" | "unreachable" | "not-owner" | "error";
@@ -460,8 +453,6 @@ export function ProblemScreen({
   message?: string;
   projectRefValue: string | null;
   onRetry: () => void;
-  /** Offered when the saved project may never answer again (deleted, or paused past restoring). */
-  onSwitch?: () => void;
   busy?: boolean;
 }) {
   const links = projectRefValue ? dashboardLinks(projectRefValue) : null;
@@ -481,7 +472,7 @@ export function ProblemScreen({
     },
     unreachable: {
       title: "Supabase isn't answering",
-      intro: "Check you're online, then try again.",
+      intro: OFFLINE_MESSAGE,
     },
     error: {
       title: `${APP_NAME} couldn't check its setup`,
@@ -503,7 +494,6 @@ export function ProblemScreen({
         <DialogButton variant={restore ? "secondary" : "primary"} onClick={onRetry} busy={busy} disabled={busy}>
           {busy ? "Checking…" : "Try again"}
         </DialogButton>
-        {onSwitch && <DialogButton variant="ghost" onClick={onSwitch} disabled={busy}>Use a different project</DialogButton>}
       </Actions>
     </Frame>
   );

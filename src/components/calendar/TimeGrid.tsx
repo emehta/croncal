@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CalendarEvent } from "@/types/calendar-event";
 import { expandRecurrences } from "@/lib/recurrence";
-import { useTimeFormat, formatTime, formatHour } from "@/lib/time-format";
+import { useTimeFormat, formatTime, formatHour, formatTimeRange } from "@/lib/time-format";
 import { getWeekRange, useWeekStart } from "@/lib/week-start";
-import { DAYS_SHORT, addDays, isToday, startOfDay, toDateStr } from "@/lib/date-utils";
+import { DAYS_SHORT, addDays, isToday, shiftDateStr, startOfDay, toDateStr } from "@/lib/date-utils";
+import { occurrenceDays } from "@/lib/event-days";
 import { Plus } from "@phosphor-icons/react";
 import { DOCK_ROOM, eventFill, eventInk } from "@/lib/styles";
 import { usePhone } from "@/lib/use-viewport-width";
@@ -748,36 +749,42 @@ export default function TimeGrid({
 
     const stripStartMs = startOfDay(rangeStart).getTime();
     const stripEndMs = rangeEnd.getTime();
+    const firstDay = toDateStr(rangeStart);
+    const lastDay = toDateStr(rangeEnd);
 
     function place(event: CalendarEvent, start: Date, end: Date, occurrence?: { start: Date; end: Date }) {
+      // An all-day event goes on its own dates (lib/event-days), not on the days its hours fall on here.
+      if (event.all_day) {
+        const span = occurrenceDays(event, start, end);
+        const stop = span.last < lastDay ? span.last : lastDay;
+        for (let day = span.first > firstDay ? span.first : firstDay; day <= stop; day = shiftDateStr(day, 1)) {
+          allDayByDay.get(day)?.push({ event, occurrence, start, end, renderStart: start, renderEnd: end });
+        }
+        return;
+      }
       if (end.getTime() <= stripStartMs || start.getTime() > stripEndMs) return;
 
-      const bucket = event.all_day ? allDayByDay : timedByDay;
       // Walk only the days this occurrence actually covers.
       const cursor = startOfDay(start.getTime() < stripStartMs ? new Date(stripStartMs) : start);
       while (cursor.getTime() <= end.getTime() && cursor.getTime() <= stripEndMs) {
-        const target = bucket.get(toDateStr(cursor));
+        const target = timedByDay.get(toDateStr(cursor));
         if (target) {
           const clipped = getClippedOccurrenceForDay(start, end, cursor);
           if (clipped) {
-            target.push({
-              event,
-              occurrence,
-              start,
-              end,
-              renderStart: event.all_day ? start : clipped.renderStart,
-              renderEnd: event.all_day ? end : clipped.renderEnd,
-            });
+            target.push({ event, occurrence, start, end, renderStart: clipped.renderStart, renderEnd: clipped.renderEnd });
           }
         }
         cursor.setDate(cursor.getDate() + 1);
       }
     }
 
+    // A day wider each side, for an all-day day whose own date is here but whose hours are not.
+    const expandFrom = addDays(rangeStart, -1);
+    const expandTo = addDays(rangeEnd, 1);
     for (const event of events) {
       if (event.recurrence) {
         // Expanded once for the whole strip, not once per day.
-        for (const occ of expandRecurrences(event, rangeStart, rangeEnd)) {
+        for (const occ of expandRecurrences(event, expandFrom, expandTo)) {
           place(event, occ.start, occ.end, occ);
         }
         continue;
@@ -1056,6 +1063,27 @@ export default function TimeGrid({
     document.addEventListener("mousemove", handleCreateMove);
     document.addEventListener("mouseup", handleCreateUp);
     dragListenersRef.current = detachCreate;
+  }
+
+  /*
+   * A double click on an empty slot makes an event there, an hour from the
+   * half hour clicked, as other calendars do. A mouse's alone: a finger taps
+   * a slot and then the box it draws (handleGridClick).
+   */
+  function handleGridDoubleClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (pointerTypeRef.current === "touch" || (e.target as Element).closest("button")) return;
+    const gridRect = e.currentTarget.getBoundingClientRect();
+    const relX = e.clientX - gridRect.left - gutterWidth;
+    if (relX < 0) return;
+    const day = days[Math.max(0, Math.min(numDays - 1, Math.floor(relX / columnWidth)))];
+    if (!day) return;
+    const minute = Math.max(0, Math.min(23 * 60 + 30, Math.floor(((e.clientY - gridRect.top) / HOUR_HEIGHT) * 2) * 30));
+    const start = new Date(day);
+    start.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+    const end = new Date(start);
+    end.setMinutes(end.getMinutes() + 60);
+    setCommittedDrag(null);
+    onSlotSelect(start, end);
   }
 
   /*
@@ -1359,7 +1387,7 @@ export default function TimeGrid({
                   paddingTop: 4,
                 }}
               >
-                <span style={{ fontSize: "var(--ui-type-micro)", color: "var(--c-text-4)", whiteSpace: "nowrap" }}>all-day</span>
+                <span style={{ fontSize: "var(--ui-type-micro)", color: "var(--c-text-4)", whiteSpace: "nowrap" }}>All day</span>
               </div>
               <div style={{ display: "flex", width: stripWidth, flexShrink: 0 }}>
                 {days.map((day) => {
@@ -1400,6 +1428,8 @@ export default function TimeGrid({
                             borderBottom: "none",
                             borderRadius: "var(--ui-radius-item)",
                             padding: "1px 4px",
+                            /* A thumb's 32 on a phone, where this is tapped. */
+                            minHeight: phone ? 32 : undefined,
                             fontSize: "var(--ui-type-caption)",
                             color: selected ? contentInk(occ.event.color) : eventInk(occ.event.color),
                             cursor: "pointer",
@@ -1445,6 +1475,7 @@ export default function TimeGrid({
             onPointerDown={(event) => { pointerTypeRef.current = event.pointerType; }}
             onMouseDown={handleMouseDown}
             onClick={handleGridClick}
+            onDoubleClick={handleGridDoubleClick}
           >
             {/* Time gutter */}
             <div
@@ -1560,7 +1591,7 @@ export default function TimeGrid({
                         <button
                           type="button"
                           className="ui-hover-opacity-soft"
-                          aria-label={`Add event from ${formatTime(slotStart, fmt)} to ${formatTime(slotEnd, fmt)}`}
+                          aria-label={`Add event, ${formatTimeRange(slotStart, slotEnd, fmt)}`}
                           /* Otherwise pressing it would begin a fresh selection underneath. */
                           onMouseDown={(event) => event.stopPropagation()}
                           onClick={() => {
@@ -1612,7 +1643,7 @@ export default function TimeGrid({
                           </div>
                           {height > 30 && !narrow && (
                             <div style={{ fontSize: "var(--ui-type-micro)", color: eventInk(ev.color), marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {formatTime(landing.start, fmt)} - {formatTime(landing.end, fmt)}
+                              {formatTimeRange(landing.start, landing.end, fmt)}
                             </div>
                           )}
                         </div>
@@ -1640,7 +1671,7 @@ export default function TimeGrid({
                           type="button"
                           key={`${occ.event.id}-${occ.start.toISOString()}-${j}`}
                           className={[isPast ? null : eventStyles.event, beingMoved ? eventStyles.moving : null].filter(Boolean).join(" ") || undefined}
-                          aria-label={`Open ${occ.event.title}, ${formatTime(occ.renderStart, fmt)} to ${formatTime(occ.renderEnd, fmt)}`}
+                          aria-label={`Open ${occ.event.title}, ${formatTimeRange(occ.renderStart, occ.renderEnd, fmt)}`}
                           data-event-key={occurrenceKey(occ)}
                           onMouseDown={(e) => handleEventMouseDown(e, occ, dayIdx, day)}
                           onClick={(e) => {
@@ -1697,7 +1728,7 @@ export default function TimeGrid({
                           </div>
                           {showTime && !narrow && (
                             <div style={{ fontSize: "var(--ui-type-micro)", color: ink, fontWeight: 400, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {formatTime(occ.renderStart, fmt)} - {formatTime(occ.renderEnd, fmt)}
+                              {formatTimeRange(occ.renderStart, occ.renderEnd, fmt)}
                             </div>
                           )}
                         </button>

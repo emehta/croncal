@@ -73,7 +73,7 @@ export function formatHour(hour: number, format?: TimeFormatPref): string {
   return hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
 }
 
-/** Format a time range from two Dates (e.g. "3:00 PM – 4:30 PM"). */
+/** Format a time range from two Dates (e.g. "3:00 PM to 4:30 PM", or "15:00 to 16:30"). */
 export function formatTimeRange(start: Date, end: Date, format?: TimeFormatPref): string {
   return `${formatTime(start, format)} to ${formatTime(end, format)}`;
 }

@@ -45,7 +45,7 @@ export function getBrowserTimeZone(): string {
 }
 
 /** A timestamp that names its own offset ("Z", "+08:00", "-0500"). */
-function hasUtcOffset(timestamp: string): boolean {
+export function hasUtcOffset(timestamp: string): boolean {
   return /(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(timestamp.trim());
 }
 
@@ -103,6 +103,18 @@ function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
   return partsToNaiveUtcMs(parts) - date.getTime();
 }
 
+const DAY_MS = 86_400_000;
+
+/**
+ * The instant a wall-clock time names in `timeZone`.
+ *
+ * Read with the zone's offset a day either side, so a change of the clocks
+ * in between is seen. Where the clocks go back, the time comes twice and the
+ * first is meant. Where they go forward, the time never comes: 02:30 on a
+ * spring-forward day is read with the offset from before the change, which
+ * lands it as late as the gap is long (03:30), never earlier, so a time
+ * typed there moves forward the way the clocks did.
+ */
 export function zonedDateTimeToUtc(
   dateStr: string,
   timeStr: string,
@@ -111,19 +123,15 @@ export function zonedDateTimeToUtc(
 ): Date {
   const [year, month, day] = dateStr.split("-").map(Number);
   const [hour, minute] = timeStr.split(":").map(Number);
-  const desired: TimeZoneParts = { year, month, day, hour, minute, second };
-  const naiveUtcMs = partsToNaiveUtcMs(desired);
+  const naiveUtcMs = partsToNaiveUtcMs({ year, month, day, hour, minute, second });
 
-  let candidateMs = naiveUtcMs - getTimeZoneOffsetMs(new Date(naiveUtcMs), timeZone);
-  for (let i = 0; i < 3; i++) {
-    const nextMs = naiveUtcMs - getTimeZoneOffsetMs(new Date(candidateMs), timeZone);
-    if (nextMs === candidateMs) {
-      break;
-    }
-    candidateMs = nextMs;
-  }
+  const before = getTimeZoneOffsetMs(new Date(naiveUtcMs - DAY_MS), timeZone);
+  const after = getTimeZoneOffsetMs(new Date(naiveUtcMs + DAY_MS), timeZone);
+  if (before === after) return new Date(naiveUtcMs - before);
 
-  return new Date(candidateMs);
+  const exact = [naiveUtcMs - before, naiveUtcMs - after]
+    .filter((candidate) => partsToNaiveUtcMs(getTimeZoneParts(new Date(candidate), timeZone)) === naiveUtcMs);
+  return new Date(exact.length > 0 ? Math.min(...exact) : naiveUtcMs - before);
 }
 
 export function shiftInstantToTimeZoneFields(

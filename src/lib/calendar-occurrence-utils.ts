@@ -8,7 +8,7 @@ export interface CalendarOccurrence {
   end: Date;
 }
 
-export function eventsOverlapRange(
+function eventsOverlapRange(
   start: Date,
   end: Date,
   rangeStart: Date,
@@ -17,7 +17,7 @@ export function eventsOverlapRange(
   return end >= rangeStart && start <= rangeEnd;
 }
 
-export function getOccurrencesInRange(
+function getOccurrencesInRange(
   event: CalendarEvent,
   rangeStart: Date,
   rangeEnd: Date,
@@ -52,12 +52,4 @@ export function getAllOccurrencesInRange(
   }
 
   return results.sort((a, b) => a.start.getTime() - b.start.getTime());
-}
-
-export function countOccurrencesInRange(
-  events: CalendarEvent[],
-  rangeStart: Date,
-  rangeEnd: Date,
-): number {
-  return getAllOccurrencesInRange(events, rangeStart, rangeEnd).length;
 }

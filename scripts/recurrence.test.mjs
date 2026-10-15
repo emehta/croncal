@@ -184,6 +184,48 @@ check("next days, yearly on 29 February in Google", nextRepeatDays("yearly", "20
 check("next days, every 2 weeks finds three", nextRepeatDays("biweekly", "2026-10-16", false).join(","), "2026-10-30,2026-11-13,2026-11-27");
 check("next days, weekdays from a Friday", nextRepeatDays("weekdays", "2026-10-16", true).join(","), "2026-10-19,2026-10-20,2026-10-21");
 
+/*
+ * An all-day day runs from midnight to 23:59:59 on the clock, so on the day
+ * the clocks change it is an hour shorter or longer than the series' first.
+ * Measured in hours instead, the day after the change ran an hour into the
+ * next (01:59:59 on 9 March in New York) and was drawn on two days.
+ */
+const allDayNy = {
+  ...event({ recurrence: "daily", start: "2026-03-06T05:00:00.000Z" }),
+  end_time: "2026-03-07T04:59:59.000Z",
+  all_day: true,
+};
+const allDays = expandRecurrences(allDayNy, new Date("2026-03-06T00:00:00Z"), new Date("2026-03-11T00:00:00Z"));
+check(
+  "an all-day day ends at 23:59:59 on its own day across the March change",
+  allDays.map((o) => `${o.start.toISOString().slice(5, 16)}>${o.end.toISOString().slice(5, 16)}`).join(","),
+  "03-06T05:00>03-07T04:59,03-07T05:00>03-08T04:59,03-08T05:00>03-09T03:59,03-09T04:00>03-10T03:59,03-10T04:00>03-11T03:59",
+);
+// And a timed day keeps its clock times at both ends, not its length in hours.
+const lateNight = expandRecurrences(
+  { ...event({ recurrence: "daily", start: "2026-10-30T04:30:00.000Z", hours: 2 }) },
+  new Date("2026-10-30T00:00:00Z"),
+  new Date("2026-11-03T00:00:00Z"),
+);
+check(
+  "a 00:30 to 02:30 day in New York is 00:30 to 02:30 on the night the clocks go back",
+  lateNight.map((o) => new Date(o.end.getTime()).toLocaleTimeString("en-GB", { timeZone: NY, hour: "2-digit", minute: "2-digit" })).join(","),
+  "02:30,02:30,02:30,02:30",
+);
+
+/*
+ * 02:30 does not happen in New York on 8 March 2026: the clocks jump from
+ * 02:00 to 03:00. A daily 02:30 event is at 03:30 that day, later, as the
+ * clocks went, never at 01:30.
+ */
+check(
+  "a time the clocks skip moves later, not earlier",
+  expand({ recurrence: "daily", start: "2026-03-07T07:30:00.000Z" }, "2026-03-07T00:00:00Z", "2026-03-10T00:00:00Z")
+    .map((o) => o.start.toLocaleTimeString("en-GB", { timeZone: NY, hour: "2-digit", minute: "2-digit" }))
+    .join(","),
+  "02:30,03:30,02:30",
+);
+
 if (failures.length) {
   console.error("\n" + failures.join("\n"));
   console.error(`\n  ${passed} passed, ${failures.length} FAILED\n`);

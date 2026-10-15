@@ -13,9 +13,10 @@
  * A text field is a box: the surface, a border at the field weight, square
  * corners, so it is plain where to type.
  *
- * Focus firms the border to the theme's own ink, not a ring in the accent,
- * which in Midnight is green and which every native picker would draw the
- * moment it opened.
+ * Focus firms the border to the theme's own ink, and draws the app's focus
+ * ring around the box (--c-focus, as on every button), not in the accent,
+ * which in Midnight is green. The ring is on the box, not the input inside
+ * it, so it never sits as a second rectangle within the first.
  */
 .field {
   display: flex;
@@ -40,6 +41,13 @@
 .field:focus-within,
 .field[aria-expanded="true"] {
   border-color: var(--c-text-3);
+}
+
+/* A box being typed in, or a picker reached by the keyboard. */
+.field:has(:focus-visible),
+.trigger:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
 }
 
 .field[data-invalid="true"] {
@@ -113,7 +121,6 @@
 }
 
 .trigger:focus-visible {
-  outline: none;
   border-color: var(--c-text-2);
 }
 
@@ -178,8 +185,10 @@
   outline: none;
 }
 
+/* The one selected look (SELECTED in lib/styles.ts), its border drawn inside so the row keeps its size. */
 .option[aria-selected="true"] {
   background: var(--c-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--c-selected-border);
   color: var(--c-text-1);
   font-weight: 600;
 }
@@ -201,8 +210,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: var(--ui-radius-sm);
   background: transparent;
@@ -240,10 +249,10 @@
 }
 
 .day[aria-pressed="true"] {
-  background: var(--c-accent-strong);
-  color: var(--c-on-accent);
+  background: var(--c-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--c-selected-border);
+  color: var(--c-text-1);
   font-weight: 600;
-  box-shadow: none;
 }
 
 /* ─── Buttons ────────────────────────────────────────────────────────────── */
@@ -374,41 +383,6 @@
   mask-image: linear-gradient(to bottom, transparent, #000 20px, #000 calc(100% - 32px), transparent);
 }
 
-/* ─── Toggle ─────────────────────────────────────────────────────────────── */
-
-.switch {
-  position: relative;
-  flex-shrink: 0;
-  width: 40px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid var(--cal-toggle-border, var(--c-border));
-  border-radius: var(--ui-radius-round);
-  background: var(--cal-toggle-off-bg, var(--c-border));
-  cursor: pointer;
-  transition: background var(--motion-base) var(--ease-out);
-}
-
-.switch[aria-checked="true"] {
-  background: var(--c-accent-strong);
-  border-color: var(--c-accent-strong);
-}
-
-.switchKnob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: var(--ui-radius-round);
-  background: var(--cal-toggle-knob, #fff);
-  transition: left var(--motion-base) var(--ease-out);
-}
-
-.switch[aria-checked="true"] .switchKnob {
-  left: 20px;
-}
-
 /* ─── Colour swatches ────────────────────────────────────────────────────── */
 
 .swatch {
@@ -424,60 +398,21 @@
   transition: transform var(--motion-fast) var(--ease-out), outline-color var(--motion-fast) var(--ease-out);
 }
 
+/* Drawn 26px, pressed across 32px. */
+.swatch {
+  position: relative;
+}
+
+.swatch::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+}
+
 .swatch:is(:hover, :focus-visible) {
   transform: scale(1.1);
 }
 
 .swatch[aria-pressed="true"] {
   outline-color: var(--c-text-1);
-}
-
-/* ─── Rich text (a description that came as HTML) ────────────────────────── */
-
-.rich {
-  color: var(--c-text-2);
-  font-size: var(--ui-type-body-sm);
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.rich > * + * {
-  margin-top: 8px;
-}
-
-.rich :is(h1, h2, h3, h4, h5, h6) {
-  color: var(--c-text-1);
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.rich h1 { font-size: var(--ui-type-subtitle); }
-.rich h2 { font-size: var(--ui-type-body); }
-.rich :is(h3, h4, h5, h6) { font-size: var(--ui-type-body-sm); }
-
-.rich strong { color: var(--c-text-1); font-weight: 600; }
-
-.rich :is(ul, ol) {
-  padding-left: 20px;
-}
-
-.rich ul { list-style: disc; }
-.rich ol { list-style: decimal; }
-
-.rich li + li {
-  margin-top: 2px;
-}
-
-.rich a {
-  color: var(--c-text-1);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.plain {
-  color: var(--c-text-2);
-  font-size: var(--ui-type-body-sm);
-  line-height: 1.65;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }

@@ -21,7 +21,7 @@ check("and it counts as a network error", isNetworkError(postgrestOffline), true
 check("a real database error keeps its own words", getErrorMessage({ message: "new row violates row-level security policy", code: "42501" }, "fallback"), "new row violates row-level security policy Code: 42501");
 check("a database error is not a network error", isNetworkError({ message: "duplicate key value" }), false);
 check("an Error's message", getErrorMessage(new Error("Could not save."), "fallback"), "Could not save.");
-check("nothing useful gives the fallback", getErrorMessage({}, "Could not load your tasks."), "Could not load your tasks.");
+check("nothing useful gives the fallback", getErrorMessage({}, "Could not load that."), "Could not load that.");
 check("a string error gives the fallback", getErrorMessage("boom", "fallback"), "fallback");
 check("an abort is an abort", isAbortError(new DOMException("aborted", "AbortError")), true);
 

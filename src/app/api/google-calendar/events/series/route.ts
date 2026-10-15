@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, requireGoogleAccessToken } from "@/lib/api-route-utils";
+import { requireGoogleAccessToken } from "@/lib/api-route-utils";
+import { fail } from "@/selfhost/http";
 import { GoogleEditError, readSeriesRepeat } from "@/app/api/google-calendar/events/google-edit";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   const seriesId = request.nextUrl.searchParams.get("seriesId");
-  if (!seriesId) return badRequest("Missing seriesId");
+  if (!seriesId) return fail("Missing seriesId");
 
   const auth = await requireGoogleAccessToken(request);
   if (!auth.ok) return auth.response;

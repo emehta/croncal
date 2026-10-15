@@ -1,73 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getGoogleAccessTokenState } from "@/lib/google-auth";
-import { AuthAccessError, requireAuthenticatedRequest } from "@/lib/owner";
-import { SESSION_ERROR_CODE } from "@/lib/session-error";
+import { GOOGLE_RECONNECT_MESSAGE } from "@/lib/google-calendar";
+import { requireAuthenticatedRequest } from "@/lib/owner";
 import { resolveGoogleRedirectUri } from "@/lib/google-redirect-uri";
+import { fail, fromError } from "@/selfhost/http";
 import { SetupError } from "@/selfhost/server";
 
 /**
- * Shared plumbing for the route handlers.
- *
- * The two blocks every handler would otherwise repeat: a try/catch that maps
- * `AuthAccessError` to its status and everything else to a logged 500, and,
- * for the Google Calendar routes, the token-state ladder. Both are here once
+ * Plumbing for the Google routes, beside the setup routes' own in
+ * selfhost/http, which these use where they overlap: the catch-all that maps
+ * a thrown error to its answer, and the token-state ladder. Both are here once
  * so a handler reads as the thing it actually does.
  */
 
 /**
  * Map a thrown error to a JSON response.
  *
- * `AuthAccessError` carries its own status and a message meant for the user;
- * anything else is unexpected, so it is logged server-side and the caller gets
- * `fallbackMessage` rather than an internal detail.
- *
- * The session errors also carry a code, so `authedFetch` can tell a stale
- * login token (worth one retry on a fresh one) from a 401 about a connected
- * service, which is never worth retrying.
+ * A SetupError (the session, the owner flag, a project not connected) carries
+ * its own status and words, and a session that ended also its code, so
+ * `authedFetch` can tell a stale login token (worth one retry on a fresh one)
+ * from a 401 about a connected service. Anything else is unexpected, so it is
+ * logged here and the caller gets `fallbackMessage` rather than an internal
+ * detail.
  */
 export function handleRouteError(
   error: unknown,
   label: string,
   fallbackMessage: string,
 ): NextResponse {
-  if (error instanceof AuthAccessError) {
-    // Only a 401 is a session worth refreshing; a 403 or a missing project is not.
-    return NextResponse.json(
-      error.status === 401 ? { error: error.message, code: SESSION_ERROR_CODE } : { error: error.message },
-      { status: error.status },
-    );
-  }
-  // The project's settings can't be read, or none is connected: said as it is.
-  if (error instanceof SetupError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-
+  if (error instanceof SetupError) return fromError(error);
   console.error(`${label}:`, error);
-  return NextResponse.json({ error: fallbackMessage }, { status: 500 });
-}
-
-/**
- * The request body as a JSON object, or null when it is missing, malformed or
- * not an object. A bare `await request.json()` throws on a bad body, and the
- * route's catch-all would answer a client mistake with a 500.
- */
-export async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
-  const body: unknown = await request.json().catch(() => null);
-  return body !== null && typeof body === "object" && !Array.isArray(body)
-    ? (body as Record<string, unknown>)
-    : null;
-}
-
-/** A 400 for a request body that is not what the route expects. */
-export function badRequest(message: string): NextResponse {
-  return NextResponse.json({ error: message }, { status: 400 });
-}
-
-/** Parse a query-string integer, falling back and clamping to a safe range. */
-export function clampInt(raw: string | null, fallback: number, min: number, max: number): number {
-  const parsed = Number.parseInt(raw ?? "", 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(Math.max(parsed, min), max);
+  return fail(fallbackMessage, 500);
 }
 
 type GoogleAccessTokenResult =
@@ -105,34 +68,12 @@ export async function requireGoogleAccessToken(
     return { ok: false, response: handleRouteError(error, "Google token check", "Could not read the Google connection. Try again in a moment.") };
   }
 
-  if (tokenState.status === "missing_auth") {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: "Google Calendar is disconnected or needs to be reconnected." },
-        { status: 401 },
-      ),
-    };
-  }
-
-  if (tokenState.status === "reconnect_required") {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: "Reconnect Google Calendar in Settings to restore access." },
-        { status: 401 },
-      ),
-    };
+  if (tokenState.status === "missing_auth" || tokenState.status === "reconnect_required") {
+    return { ok: false, response: fail(GOOGLE_RECONNECT_MESSAGE, 401) };
   }
 
   if (tokenState.status === "temporary_failure" || !tokenState.accessToken) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: "Google Calendar is temporarily unavailable. Try again in a moment." },
-        { status: 503 },
-      ),
-    };
+    return { ok: false, response: fail("Google Calendar is temporarily unavailable. Try again in a moment.", 503) };
   }
 
   return { ok: true, userId, accessToken: tokenState.accessToken };

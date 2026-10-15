@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type CSSProperties, type KeyboardEventHandler, type ReactNode, type Ref } from "react";
 import { X } from "@phosphor-icons/react";
 import Modal from "@/components/Modal";
+import Tooltip from "@/components/Tooltip";
 import { usePhone } from "@/lib/use-viewport-width";
 import styles from "./form.module.css";
 import danger from "./DangerFill.module.css";
@@ -27,7 +28,6 @@ export function DialogCard({
   cardClassName,
   footer,
   onKeyDown,
-  closeLabel = "Close",
   maxWidth = DIALOG_MAX_WIDTH,
   fit = false,
   cardStyle,
@@ -45,7 +45,6 @@ export function DialogCard({
   cardClassName?: string;
   footer?: ReactNode;
   onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
-  closeLabel?: string;
   /**
    * Only for a card whose content is not a form, such as one that listens
    * in a small card and grows to the standard width to show what it heard.
@@ -118,6 +117,7 @@ export function DialogCard({
     >
       <div
         aria-busy={busy}
+        data-saving={busy ? "true" : undefined}
         onKeyDown={onKeyDown}
         style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0 }}
       >
@@ -146,18 +146,21 @@ export function DialogCard({
           >
             {heading}
           </div>
-          <button
-            type="button"
-            className={`${styles.button} ${styles.ghost} ${styles.iconButton}`}
-            onClick={onClose}
-            disabled={busy}
-            aria-label={closeLabel}
-            /* Pulled into the corner, so the X sits on the same edge as the
-               fields rather than 8px inside it. */
-            style={{ marginRight: -8 }}
-          >
-            <X size={16} />
-          </button>
+          {/* Pulled into the corner, so the X sits on the same edge as the
+              fields rather than 8px inside it. */}
+          <span style={{ display: "flex", marginRight: -8 }}>
+            <Tooltip label="Close">
+              <button
+                type="button"
+                className={`${styles.button} ${styles.ghost} ${styles.iconButton}`}
+                onClick={onClose}
+                disabled={busy}
+                aria-label="Close"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          </span>
         </div>
 
         <div ref={bodyRef} className={styles.body} style={{ padding: `${phone ? 10 : 14}px ${gutter}px ${phone ? 16 : 20}px` }}>

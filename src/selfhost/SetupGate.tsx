@@ -16,10 +16,27 @@ import {
   ProblemScreen,
   SignInScreen,
 } from "@/selfhost/SetupScreens";
+import { projectRef } from "@/selfhost/keys";
 import { nextStep, serverState, type SessionState, type StatusResponse } from "@/selfhost/steps";
 import { clearPageCache } from "@/lib/page-cache";
 
 const STATUS_TIMEOUT_MS = 20_000;
+/* A page reloaded for a newer config waits this long before doing so again,
+   so a config that never arrives shows a screen rather than reloading forever. */
+const RELOAD_KEY = "setup-config-reload";
+const RELOAD_GAP_MS = 15_000;
+
+/** Reloads the page once, unless it reloaded for this a moment ago. */
+function reloadForConfig() {
+  try {
+    const last = Number(window.sessionStorage.getItem(RELOAD_KEY));
+    if (Date.now() - last < RELOAD_GAP_MS) return;
+    window.sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+  } catch {
+    // No session storage: reloading once more is still better than a page on no project.
+  }
+  window.location.reload();
+}
 
 function sessionState(session: Session | null): SessionState {
   if (!session) return "none";
@@ -27,8 +44,8 @@ function sessionState(session: Session | null): SessionState {
 }
 
 /**
- * Stands where the signed-in app's gate stood: nothing below it renders until
- * the copy is connected, its database is set up, and its owner is signed in.
+ * Nothing below it renders until the copy is connected, its database is set
+ * up, and its owner is signed in.
  */
 export default function SetupGate({ children }: { children: ReactNode }) {
   const config = useAppConfig();
@@ -38,7 +55,6 @@ export default function SetupGate({ children }: { children: ReactNode }) {
   const [checking, setChecking] = useState(false);
   const [session, setSession] = useState<SessionState | null>(config ? null : "none");
   const [databaseChecks, setDatabaseChecks] = useState(0);
-  const [switching, setSwitching] = useState(false);
 
   const refresh = useCallback(async () => {
     setChecking(true);
@@ -62,6 +78,14 @@ export default function SetupGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  /* The page's config is read as it loads. A project connected since, in
+     another tab or by hand, reaches it only on a fresh load. */
+  const pageRef = config ? projectRef(config.url) : null;
+  useEffect(() => {
+    if (!status?.configured) return;
+    if (!config || (status.ref && pageRef !== status.ref)) reloadForConfig();
+  }, [status, config, pageRef]);
 
   useEffect(() => {
     if (!config) return;
@@ -89,8 +113,6 @@ export default function SetupGate({ children }: { children: ReactNode }) {
   const ref = status?.ref ?? null;
   const fromEnvironment = status?.fromEnvironment ?? false;
 
-  if (switching && !fromEnvironment) return <ConnectScreen mode="switch" onConnected={reload} onCancel={() => setSwitching(false)} />;
-
   switch (step) {
     case "loading":
       return <LoadingScreen />;
@@ -101,17 +123,11 @@ export default function SetupGate({ children }: { children: ReactNode }) {
     case "rejected":
       return fromEnvironment
         ? <EnvironmentScreen problems={[]} rejected onRetry={retry} busy={checking} />
-        : <ConnectScreen mode="rejected" onConnected={reload} />;
+        : <ConnectScreen mode="rejected" projectRefValue={ref} onConnected={reload} />;
     case "paused":
     case "unreachable":
       return (
-        <ProblemScreen
-          kind={step}
-          projectRefValue={ref}
-          onRetry={retry}
-          busy={checking}
-          onSwitch={fromEnvironment ? undefined : () => setSwitching(true)}
-        />
+        <ProblemScreen kind={step} projectRefValue={ref} onRetry={retry} busy={checking} />
       );
     case "database":
     case "update-database":

@@ -138,7 +138,7 @@
   gap: 5cqw;
   padding: 11cqw 0 0 11cqw;
   background: var(--c-card-bg);
-  border: 1px solid var(--dashboard-card-border);
+  border: 1px solid var(--card-border);
 }
 
 .title {

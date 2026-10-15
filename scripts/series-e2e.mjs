@@ -95,6 +95,49 @@ try {
   }
   await events.applyRecurringSeriesEdit(series, day(0), { ...base, start_time: week(1), end_time: week(1, 2), recurrence_until: week(5, 23) }, { ...series, start_time: week(0), end_time: week(0, 2) });
   check("all days moved a week, the changed days with them", await shown(), ["weekly 01-13T01:00", "a 01-20T07:00", "b 01-27T07:00", "weekly 02-03T01:00", "weekly 02-10T01:00"]);
+
+  // From week 2, "Does not repeat": the series ends there, and week 2 is one event of its own.
+  await cleanUp();
+  ({ event: series } = await events.createCalendarEvent({ ...base, recurrence_until: week(4, 23) }));
+  await events.applyRecurringOccurrenceEdit(series, day(3), { ...base, title: `${TAG} moved`, start_time: week(3, 7), end_time: week(3, 8), recurrence: null });
+  ({ data: series } = await supabase.from("calendar_events").select("*").eq("id", series.id).single());
+  await events.applyRecurringFollowingEdit(series, day(2), { ...base, title: `${TAG} once`, start_time: week(2), end_time: week(2, 2), recurrence: null });
+  check("Does not repeat from a day ends the series there, and the days after it go", await shown(), ["weekly 01-06T01:00", "weekly 01-13T01:00", "once 01-20T01:00"]);
+
+  // From week 1, a day later: the skipped and changed days after it move a day too, as for all days.
+  await cleanUp();
+  ({ event: series } = await events.createCalendarEvent({ ...base, recurrence_until: week(5, 23) }));
+  await events.deleteRecurringOccurrence(series, day(2));
+  ({ data: series } = await supabase.from("calendar_events").select("*").eq("id", series.id).single());
+  await events.applyRecurringOccurrenceEdit(series, day(3), { ...base, title: `${TAG} moved`, start_time: week(3, 7), end_time: week(3, 8), recurrence: null });
+  ({ data: series } = await supabase.from("calendar_events").select("*").eq("id", series.id).single());
+  const tuesday = (n, hour = 1) => new Date(new Date(week(n, hour)).getTime() + 86_400_000).toISOString();
+  const split = crypto.randomUUID();
+  const following = { ...base, start_time: tuesday(1), end_time: tuesday(1, 2), recurrence_until: week(5, 23) };
+  await events.applyRecurringFollowingEdit(series, day(1), following, undefined, split);
+  // The same save sent again, as after an answer lost on its way back: nothing more changes.
+  await events.applyRecurringFollowingEdit(series, day(1), following, undefined, split);
+  check("this and following a day later moves its skipped and changed days with it, and sent twice makes one series",
+    await shown(), ["weekly 01-06T01:00", "weekly 01-14T01:00", "moved 01-28T07:00", "weekly 02-04T01:00"]);
+
+  // Deleting from the first day deletes the whole series, its changed days too.
+  await cleanUp();
+  ({ event: series } = await events.createCalendarEvent({ ...base, recurrence_until: week(4, 23) }));
+  await events.applyRecurringOccurrenceEdit(series, day(2), { ...base, title: `${TAG} moved`, start_time: week(2, 7), end_time: week(2, 8), recurrence: null });
+  ({ data: series } = await supabase.from("calendar_events").select("*").eq("id", series.id).single());
+  await events.deleteRecurringFollowing(series, day(0));
+  const { data: gone } = await supabase.from("calendar_events").select("id").like("title", `${TAG}%`);
+  check("deleting this and following from the first day deletes the whole series", gone?.length, 0);
+
+  // A changed day is still a day of its series: renamed for all days from it, the series is renamed and it keeps its own time.
+  await cleanUp();
+  ({ event: series } = await events.createCalendarEvent({ ...base, recurrence_until: week(2, 23) }));
+  await events.applyRecurringOccurrenceEdit(series, day(1), { ...base, start_time: week(1, 7), end_time: week(1, 8), recurrence: null });
+  ({ data: series } = await supabase.from("calendar_events").select("*").eq("id", series.id).single());
+  const { data: changedDay } = await supabase.from("calendar_events").select("*").eq("recurrence_parent_id", series.id).single();
+  const shownChanged = { ...changedDay, recurrence: series.recurrence };
+  await events.applyRecurringSeriesEdit(series, day(1), { ...shownChanged, title: `${TAG} renamed` }, shownChanged);
+  check("all days renamed from a day changed on its own", await shown(), ["renamed 01-06T01:00", "renamed 01-13T07:00", "renamed 01-20T01:00"]);
 } finally {
   await cleanUp();
 }

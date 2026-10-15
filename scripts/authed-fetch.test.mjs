@@ -108,7 +108,7 @@ function install({ unauthorizedFirstCall = true, holdUntil = 0 } = {}) {
 {
   const state = install({ holdUntil: 2 });
   // What opening Settings does: two rows mount and each calls its own endpoint.
-  const [a, b] = await Promise.all([authedFetch("/api/goals"), authedFetch("/api/tasks")]);
+  const [a, b] = await Promise.all([authedFetch("/api/first"), authedFetch("/api/second")]);
 
   check("two simultaneous 401s never refresh concurrently", state.concurrent, 1);
   check("…and only one refresh is spent between them", state.refreshes, 1);

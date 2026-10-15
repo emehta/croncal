@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { Icon } from "@phosphor-icons/react";
+import { SELECTED } from "@/lib/styles";
 
 /** The pieces every section of Settings is built from, so each row looks and behaves the same. */
 
@@ -69,15 +70,18 @@ export function TogglePill({
             disabled={disabled}
             style={{
               minWidth: TOGGLE_SEGMENT_WIDTH,
+              minHeight: 32,
               padding: "6px 8px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: "var(--ui-type-body-sm)",
-              fontWeight: active ? 600 : 400,
+              fontWeight: active ? SELECTED.fontWeight : 400,
               fontVariantNumeric: "tabular-nums",
-              color: active ? "var(--c-accent)" : "var(--c-text-3)",
-              background: active ? "color-mix(in srgb, var(--c-accent) 10%, transparent)" : "transparent",
+              color: active ? SELECTED.color : "var(--c-text-3)",
+              background: active ? SELECTED.background : "transparent",
+              // The one selected look, its border drawn inside: the group already has the outer edge.
+              boxShadow: active ? "inset 0 0 0 1px var(--c-selected-border)" : "none",
               border: "none",
               cursor: disabled ? "default" : "pointer",
               opacity: disabled && !active ? 0.6 : 1,

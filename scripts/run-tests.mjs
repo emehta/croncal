@@ -2,14 +2,12 @@
  * Runs every suite in scripts/: `npm test`.
  *
  * The suites are plain node scripts that assert and exit non-zero (see
- * CONTRIBUTING.md for why there is no framework). This used to be a hand-kept chain
- * of `npm run test:x && npm run test:y …` in package.json, so a new suite ran
- * only if someone remembered to add it to the chain, and one that was never
- * added failed in silence forever. Every `*.test.mjs` here runs now.
+ * CONTRIBUTING.md for why there is no framework). Every `*.test.mjs` here
+ * runs, found by name, so a new suite needs no list to be added to.
  *
  * Each suite gets its own process, so one that throws at import time cannot
  * take the others down with it, and all of them run before the result is
- * reported: the first failure no longer hides the rest.
+ * reported, so one failure never hides another.
  *
  *   npm test                 every suite
  *   npm test -- task setup   only the suites whose file name contains one of these

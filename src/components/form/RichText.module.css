@@ -1,0 +1,49 @@
+/* Long text on a view card (RichText): a description that came as HTML, or as written. */
+
+.rich {
+  color: var(--c-text-2);
+  font-size: var(--ui-type-body-sm);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.rich > * + * {
+  margin-top: 8px;
+}
+
+.rich :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--c-text-1);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.rich h1 { font-size: var(--ui-type-subtitle); }
+.rich h2 { font-size: var(--ui-type-body); }
+.rich :is(h3, h4, h5, h6) { font-size: var(--ui-type-body-sm); }
+
+.rich strong { color: var(--c-text-1); font-weight: 600; }
+
+.rich :is(ul, ol) {
+  padding-left: 20px;
+}
+
+.rich ul { list-style: disc; }
+.rich ol { list-style: decimal; }
+
+.rich li + li {
+  margin-top: 2px;
+}
+
+.rich a {
+  color: var(--c-text-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.plain {
+  color: var(--c-text-2);
+  font-size: var(--ui-type-body-sm);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

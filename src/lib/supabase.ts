@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { BrowserConfig } from "@/selfhost/config";
+import { APP, APP_NAME } from "@/selfhost/constants";
 
 /*
  * The browser's Supabase client, made when the config arrives rather than
@@ -65,13 +66,13 @@ export function configureSupabase(config: BrowserConfig | null): void {
       flowType: "pkce",
       storage: browserLocalStorage,
       // One session per project: an old project's session must never open the app against a new one.
-      storageKey: `croncal-auth-${projectKey(config.url)}`,
+      storageKey: `${APP}-auth-${projectKey(config.url)}`,
     },
   });
 }
 
 export function getSupabase(): SupabaseClient {
-  if (!client) throw new Error("CronCal is not connected to a Supabase project yet.");
+  if (!client) throw new Error(`${APP_NAME} is not connected to a Supabase project yet.`);
   return client;
 }
 

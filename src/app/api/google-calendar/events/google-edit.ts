@@ -8,8 +8,10 @@
  * with a token of its own, which is how it was checked.
  */
 
+import { createHash } from "node:crypto";
 import type { GoogleEventChanges, RecurrenceEditScope, RepeatChoice } from "@/types/calendar-event";
 import {
+  type GoogleAttendee,
   changedFieldKeys,
   changesTiming,
   googleEventFields,
@@ -38,6 +40,7 @@ import {
   timingAtSlot,
 } from "@/lib/google-recurrence";
 import { googleEndpoints } from "@/lib/google-endpoints";
+import { GOOGLE_RECONNECT_MESSAGE } from "@/lib/google-calendar";
 
 
 /** A failure with the words and status the route should answer with. */
@@ -60,7 +63,7 @@ type GoogleEvent = GoogleEventResource & {
   iCalUID?: string;
   eventType?: string;
   organizer?: { self?: boolean };
-  attendees?: Array<{ email?: string; displayName?: string }>;
+  attendees?: GoogleAttendee[];
   conferenceData?: unknown;
   attachments?: unknown;
   [key: string]: unknown;
@@ -122,10 +125,10 @@ async function call(
     }
     console.error(`Google ${method} ${path.split("?")[0]} failed:`, response.status, text.slice(0, 500));
     if (response.status === 401) {
-      throw new GoogleEditError("Reconnect Google Calendar in Settings to restore access.", 401);
+      throw new GoogleEditError(GOOGLE_RECONNECT_MESSAGE, 401);
     }
     if (response.status === 403 && !worthRetrying(response.status, reason)) {
-      throw new GoogleEditError("Google Calendar did not allow that change. An event someone else organises can only take its colour, type, importance and link from you.", 403);
+      throw new GoogleEditError("Google Calendar did not allow that change. An event someone else organises can only take its colour, type, priority and link from you.", 403);
     }
     throw new GoogleEditError("Google Calendar could not save that change. Try again in a moment.", 502);
   }
@@ -156,7 +159,7 @@ function timingOf(event: GoogleEvent): GoogleTiming {
 function requestedTiming(changes: GoogleEventChanges): GoogleTiming | null {
   if (!changesTiming(changes)) return null;
   const timing = googleEventTiming(changes);
-  if (!timing) throw new GoogleEditError("The event needs a valid start, end and all-day setting.", 400);
+  if (!timing) throw new GoogleEditError("The event needs a valid start and end.", 400);
   return timing as GoogleTiming;
 }
 
@@ -250,18 +253,28 @@ async function restoreExceptions(
     });
     if (!plan.cancelled && Object.keys(body).length === 0) continue;
 
-    const slot = slotAfterShift(plan.slot, dayShift, seriesStart, zone);
-    let id: string | null = instanceId(seriesId, slot);
-    let restored = false;
-    for (let attempt = 0; attempt < 2 && id && !restored; attempt++) {
-      const { status } = plan.cancelled
-        ? await call(context, "DELETE", eventPath(id), undefined, [404, 410])
-        : await call(context, "PATCH", eventPath(id), body, [404]);
-      restored = status !== 404;
-      if (!restored) id = attempt === 0 ? await findInstanceId(context, seriesId, slot) : null;
+    /*
+     * The series has already changed, so a day Google refuses is counted and
+     * the rest still go back: one failure must not turn a saved change into
+     * an error, nor leave the days after it unrestored.
+     */
+    try {
+      const slot = slotAfterShift(plan.slot, dayShift, seriesStart, zone);
+      let id: string | null = instanceId(seriesId, slot);
+      let restored = false;
+      for (let attempt = 0; attempt < 2 && id && !restored; attempt++) {
+        const { status } = plan.cancelled
+          ? await call(context, "DELETE", eventPath(id), undefined, [404, 410])
+          : await call(context, "PATCH", eventPath(id), body, [404]);
+        restored = status !== 404;
+        if (!restored) id = attempt === 0 ? await findInstanceId(context, seriesId, slot) : null;
+      }
+      // A deleted day the new series does not have is deleted already.
+      if (!restored && !plan.cancelled) missed++;
+    } catch (error) {
+      console.error("Putting back a changed day failed:", error);
+      missed++;
     }
-    // A deleted day the new series does not have is deleted already.
-    if (!restored && !plan.cancelled) missed++;
   }
 
   return missed;
@@ -386,6 +399,22 @@ export async function editGoogleEvent(
 }
 
 /**
+ * The id of the series a split makes, chosen here as createGoogleEvent
+ * chooses one, so a POST Google carried out but answered with a 500 is found
+ * on the retry (a 409) instead of made twice. It is taken from the series,
+ * the day it is split at and the series' etag: asked again, the same split
+ * names the same new series, and once the old series is cut short its etag
+ * changes, so a later split names another. Hex is within the base32hex
+ * Google takes.
+ */
+export function splitSeriesId(series: { id?: string; etag?: unknown; updated?: unknown }, pivotMs: number): string {
+  return createHash("sha256")
+    .update(`${series.id ?? ""}|${pivotMs}|${String(series.etag ?? series.updated ?? "")}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+/**
  * "This and following": the series ends the day before, and a new series
  * with the change starts on this day, carrying on to where the old one would
  * have ended. The new one is made first, so a failure leaves the calendar as
@@ -442,8 +471,14 @@ async function splitSeries(
   const query = new URLSearchParams();
   if (body.conferenceData) query.set("conferenceDataVersion", "1");
   if (body.attachments) query.set("supportsAttachments", "true");
-  const created = await call(context, "POST", query.size > 0 ? `?${query.toString()}` : "", body);
-  const newId = (created.body as GoogleEvent | null)?.id;
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  const chosenId = splitSeriesId(series, pivotMs);
+  const created = await call(context, "POST", suffix, { ...body, id: chosenId }, [409]);
+  if (created.status === 409) {
+    // Made by an earlier try of this split (and perhaps taken back out): it becomes this one.
+    await call(context, "PUT", eventPath(chosenId, suffix), { ...body, id: chosenId, status: "confirmed" });
+  }
+  const newId = created.status === 409 ? chosenId : (created.body as GoogleEvent | null)?.id;
   if (!newId) throw new GoogleEditError("Google Calendar could not save that change. Try again in a moment.", 502);
 
   try {

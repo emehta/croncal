@@ -21,6 +21,7 @@ import {
 } from "@/lib/google-recurrence";
 import { formatDateForTimeZone, zonedDateTimeToUtc } from "@/lib/calendar-timezone";
 import { shiftDateStr } from "@/lib/date-utils";
+import { expandRecurrences } from "@/lib/recurrence";
 
 type EventFields = Partial<Omit<CalendarEvent, "id" | "created_at">>;
 
@@ -173,4 +174,162 @@ export function changedRowFields(current: EventFields, original: Partial<Calenda
     if (changeKey in changes) fields[key] = current[key] ?? null;
   }
   return fields as Partial<CalendarEvent>;
+}
+
+/* ─── what a save writes to a CronCal series ─────────────────────────── */
+
+/** A changed day of a series, and what a save sets on it. */
+export type ChangedDayUpdate = { id: string; fields: Partial<CalendarEvent> };
+
+export type AllDaysPlan = {
+  /** Set on the series. */
+  fields: Partial<CalendarEvent>;
+  /** Set on its changed days. */
+  days: ChangedDayUpdate[];
+  /** The series no longer repeats, so its changed days go. */
+  dropDays: boolean;
+};
+
+/** The form's times, all four, which travel together. */
+function timingOf(updates: Timing): Timing {
+  return { start_time: updates.start_time, end_time: updates.end_time, all_day: updates.all_day, timezone: updates.timezone };
+}
+
+/**
+ * A change to every day of a CronCal series, from the form opened on one of
+ * them. `shown` is that day as the form showed it: a day of the series, or a
+ * day changed on its own, so only what the save changed against it reaches
+ * the series, never the day's own differences. Moved, the series goes as far
+ * as the day did (planSeriesMove), its skipped and changed days with it, and
+ * the day the form was opened on, if it is a changed day, takes the form's
+ * times. A field set for all days is set on the changed days too, unless
+ * `carry` is off.
+ */
+export function planAllDaysEdit(
+  series: CalendarEvent,
+  shown: Pick<CalendarEvent, "id" | "start_time" | "end_time"> & EventFields,
+  updates: EventFields & Timing,
+  changedDays: readonly CalendarEvent[],
+  carry = true,
+): AllDaysPlan {
+  const carried = changedRowFields(updates, shown);
+  // Notes are CronCal's own, so Google's comparison above never sees them: set on the series when changed, never carried to a changed day.
+  const notes = "meeting_notes" in updates && (updates.meeting_notes ?? null) !== (shown.meeting_notes ?? null)
+    ? { meeting_notes: updates.meeting_notes ?? null }
+    : {};
+  // The series' end, only when the save set a new one: a changed day carries its own (none).
+  const until = "recurrence_until" in updates && (updates.recurrence_until ?? null) !== (shown.recurrence_until ?? null)
+    ? { recurrence_until: updates.recurrence_until ?? null }
+    : {};
+  if (!updates.recurrence) {
+    // No longer repeating: one event, where the form put it.
+    return {
+      fields: { ...carried, ...notes, ...timingOf(updates), recurrence: null, recurrence_until: null, recurrence_exceptions: [] },
+      days: [],
+      dropDays: true,
+    };
+  }
+
+  const fields: Partial<CalendarEvent> = { ...carried, ...notes, ...until, recurrence: updates.recurrence };
+  const day = { start: new Date(shown.start_time), end: new Date(shown.end_time) };
+  const toDays = (row: { id: string }, place: Partial<CalendarEvent> = {}): ChangedDayUpdate => ({
+    id: row.id,
+    fields: {
+      ...(carry || row.id === shown.id ? carried : {}),
+      ...place,
+      ...(row.id === shown.id && "start_time" in place ? timingOf(updates) : {}),
+    },
+  });
+
+  if (!dayTimesChanged(day, series, updates)) {
+    return { fields, days: changedDays.map((row) => toDays(row)), dropDays: false };
+  }
+  const plan = planSeriesMove(series, day, updates, changedDays);
+  return {
+    fields: { ...fields, start_time: plan.start_time, end_time: plan.end_time, all_day: updates.all_day, timezone: updates.timezone, recurrence_exceptions: plan.recurrence_exceptions },
+    days: plan.overrides.map(({ id, ...place }) => toDays({ id }, place)),
+    dropDays: false,
+  };
+}
+
+/** A series' skipped days, before `pivotIso` and from it, each in order. */
+export function splitExceptionStarts(
+  values: readonly string[] | null | undefined,
+  pivotIso: string,
+): { before: string[]; fromPivot: string[] } {
+  const pivotMs = new Date(pivotIso).getTime();
+  const sorted = [...new Set((values ?? []).filter(Boolean))].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  return {
+    before: sorted.filter((value) => new Date(value).getTime() < pivotMs),
+    fromPivot: sorted.filter((value) => new Date(value).getTime() >= pivotMs),
+  };
+}
+
+export type FollowingPlan = {
+  /** The new series, over the old one's fields. */
+  next: Partial<CalendarEvent>;
+  /** The changed days from the pivot on that it keeps, at their places in it; the others go. */
+  days: ChangedDayUpdate[];
+};
+
+/**
+ * A change to a CronCal series from one of its days on. `pivot` is the day's
+ * place in the series and `shown` the day as the form showed it. The series
+ * is split there, and the new series is the old one from that day, changed
+ * as a change to all its days would change it (planAllDaysEdit): moved, its
+ * skipped and changed days move with it, though a changed day keeps its own
+ * changes. "Does not repeat" makes it one event, the form's, and the days
+ * after it go; a new rule (weekly to daily) starts with no skipped or changed
+ * days, since its days don't line up with the old ones.
+ */
+export function planFollowingEdit(
+  series: CalendarEvent,
+  pivot: { start: Date; end: Date },
+  shown: Pick<CalendarEvent, "id" | "start_time" | "end_time"> & EventFields,
+  updates: EventFields & Timing,
+  changedDays: readonly CalendarEvent[],
+): FollowingPlan {
+  // "in", not ??: Does not repeat is a null, and must not fall back to the old rule.
+  const rule = "recurrence" in updates ? updates.recurrence ?? null : series.recurrence;
+  if (!rule) {
+    const plan = planAllDaysEdit(series, shown, { ...updates, recurrence: null }, []);
+    return { next: plan.fields, days: [] };
+  }
+
+  const pivotIso = pivot.start.toISOString();
+  const { fromPivot } = splitExceptionStarts(series.recurrence_exceptions, pivotIso);
+  const fromHere: CalendarEvent = { ...series, start_time: pivotIso, end_time: pivot.end.toISOString(), recurrence_exceptions: fromPivot };
+  const later = changedDays.filter((row) => row.original_occurrence_start && new Date(row.original_occurrence_start).getTime() >= pivot.start.getTime());
+  const plan = planAllDaysEdit(fromHere, shown, { ...updates, recurrence: rule }, later, false);
+  const sameRule = rule === series.recurrence;
+  return {
+    next: {
+      start_time: fromHere.start_time,
+      end_time: fromHere.end_time,
+      recurrence_until: series.recurrence_until ?? null,
+      ...plan.fields,
+      recurrence_exceptions: sameRule ? plan.fields.recurrence_exceptions ?? fromPivot : [],
+    },
+    days: sameRule ? plan.days : [],
+  };
+}
+
+/**
+ * The day of `series` a changed day took over: its place, at the series' own
+ * times that day, which is how the series names it whatever the day was
+ * changed to.
+ */
+export function placeOfChangedDay(
+  series: CalendarEvent,
+  day: Pick<CalendarEvent, "original_occurrence_start">,
+): { start: Date; end: Date } | null {
+  if (!day.original_occurrence_start) return null;
+  const start = new Date(day.original_occurrence_start);
+  if (!Number.isFinite(start.getTime())) return null;
+  // The place is skipped in the series (the changed day stands in for it), so it is read with no days skipped.
+  const slot = expandRecurrences({ ...series, recurrence_exceptions: [] }, start, new Date(start.getTime() + 1))
+    .find((occurrence) => occurrence.start.getTime() === start.getTime());
+  if (slot) return slot;
+  const length = new Date(series.end_time).getTime() - new Date(series.start_time).getTime();
+  return { start, end: new Date(start.getTime() + length) };
 }

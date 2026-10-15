@@ -46,8 +46,8 @@ function errorText(error: unknown): string {
 
 const NETWORK = /failed to fetch|networkerror|load failed|network request failed/i;
 
-/** What a person is told when the server could not be reached at all. */
-export const OFFLINE_MESSAGE = "Could not reach Supabase. Check that you're online, then try again.";
+/** What a person is told when the server could not be reached at all: the one offline message, everywhere. */
+export const OFFLINE_MESSAGE = "Check you're online, then try again.";
 
 /**
  * An error in words for a banner. A dropped connection says so plainly:

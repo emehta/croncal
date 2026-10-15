@@ -157,12 +157,3 @@ export const CALENDAR_COLUMN_GAP = 12;
  */
 export const PAGE_HEADER_HEIGHT = 32;
 export const PAGE_HEADER_GAP = 20;
-
-/**
- * A content hue as text, mixed with the theme's own ink: the inline twin of
- * `.ui-hue-ink` in globals.css, for style objects that take a colour value.
- * Works on hex and on `var()` alike.
- */
-export function hueInk(color: string): string {
-  return `color-mix(in srgb, ${color} var(--hue-ink, 40%), var(--c-text-1))`;
-}

@@ -91,7 +91,7 @@ export interface GoogleEventCreate extends GoogleEventChanges {
 
 type EventChoice<T> = { value: T; label: string; color: string };
 
-/** An event's priority, high to low, in Todoer's priority colours. */
+/** An event's priority, high to low, each in its own colour. */
 export const EVENT_PRIORITIES: EventChoice<NonNullable<CalendarEvent["importance"]>>[] = [
   { value: "high", label: "High", color: "var(--priority-high, #eb8909)" },
   { value: "medium", label: "Medium", color: "var(--c-info)" },

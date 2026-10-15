@@ -24,6 +24,7 @@ import {
   deleteRecurringOccurrence,
   deleteRecurringFollowing,
   fetchGoogleSeriesRepeat,
+  GoogleRouteError,
   type GoogleSeriesRepeat,
   type RecurrenceEditScope,
 } from "@/lib/calendar-events";
@@ -38,7 +39,18 @@ import type { GoogleStatusPayload } from "@/app/api/auth/google/status/route";
 import { rememberConnection, rememberedConnection } from "@/lib/connection-memory";
 import { CALENDAR_COLUMN_GAP, UNDER_DOCK_MARGIN } from "@/lib/styles";
 import { usePhone } from "@/lib/use-viewport-width";
-import { eventChanges, scopeOptions } from "@/lib/series-edit";
+import { eventChanges, placeOfChangedDay, scopeOptions } from "@/lib/series-edit";
+import {
+  cacheGeneration,
+  invalidateEventCache,
+  isFresh,
+  readEventCache,
+  writeEventCache,
+} from "@/lib/page-cache";
+import { countSpans } from "@/lib/event-days";
+import { useToday } from "@/lib/use-today";
+import { useWeekStart } from "@/lib/week-start";
+import { fromDateStr, shiftDateStr, startOfMonth } from "@/lib/date-utils";
 
 // ─── Date range helpers ──────────────────────────────────────────────
 
@@ -89,17 +101,6 @@ type CalendarView = "day" | "week" | "month";
  */
 type GoogleCalendarStatus = "checking" | "connected" | "disconnected" | "reconnect";
 
-type CalendarEventCacheEntry = {
-  events: CalendarEvent[];
-  timestamp: number;
-  view: CalendarView;
-  startIso: string;
-  endIso: string;
-  googleEnabled: boolean;
-  startMs: number;
-  endMs: number;
-};
-
 type EventRangeDescriptor = {
   view: CalendarView;
   currentDate: Date;
@@ -109,35 +110,11 @@ type EventRangeDescriptor = {
   cacheKey: string;
 };
 
-const EVENT_CACHE_STALE_MS = 60 * 1000;
-const eventCache = new Map<string, CalendarEventCacheEntry>();
+/* The windows a prefetch is already fetching; the events themselves are in lib/page-cache. */
 const prefetchInFlight = new Set<string>();
 
 function getEventCacheKey(view: CalendarView, startIso: string, endIso: string, googleEnabled: boolean): string {
   return `${view}:${startIso}:${endIso}:google-${googleEnabled ? "on" : "off"}`;
-}
-
-function setEventCache(
-  view: CalendarView,
-  startIso: string,
-  endIso: string,
-  googleEnabled: boolean,
-  events: CalendarEvent[],
-) {
-  eventCache.set(getEventCacheKey(view, startIso, endIso, googleEnabled), {
-    events,
-    timestamp: Date.now(),
-    view,
-    startIso,
-    endIso,
-    googleEnabled,
-    startMs: new Date(startIso).getTime(),
-    endMs: new Date(endIso).getTime(),
-  });
-}
-
-function isFresh(entry: CalendarEventCacheEntry | undefined): entry is CalendarEventCacheEntry {
-  return Boolean(entry && Date.now() - entry.timestamp < EVENT_CACHE_STALE_MS);
 }
 
 function buildEventRangeDescriptor(
@@ -207,54 +184,44 @@ function waitForScrollEnd(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function invalidateEventCacheForEventLike(
-  event: { start_time?: string; end_time?: string; recurrence?: CalendarEvent["recurrence"] } | null | undefined,
-) {
-  if (!event?.start_time || !event.end_time || event.recurrence) {
-    eventCache.clear();
-    return;
-  }
-
-  const startMs = new Date(event.start_time).getTime();
-  const endMs = new Date(event.end_time).getTime();
-
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
-    eventCache.clear();
-    return;
-  }
-
-  for (const [key, entry] of eventCache.entries()) {
-    if (endMs >= entry.startMs && startMs <= entry.endMs) {
-      eventCache.delete(key);
-    }
-  }
-}
-
 type CalendarOccurrenceSelection = {
   start: Date;
   end: Date;
 };
 
 /**
- * Whether an event is one day of a series: one of CronCal's own, or a day of a
- * Google series, which Google sends expanded, each with its own id. Taken
- * for a one-off, a change to a Google day would change that day alone
- * without asking.
+ * One day of a series, which a change, drag or deletion asks about: the
+ * series, which of its days (its place, as the series names it), and the day
+ * as the form shows it.
+ *
+ * A day of a CronCal series is the series drawn on that day. A day changed on
+ * its own is a row of its own but still a day of its series, at the place it
+ * took over, with the series' repeat. A day of a Google series comes from
+ * Google expanded, with an id of its own, and is what every Google route
+ * takes. Taken for a one-off, a change to any of these would change that day
+ * alone without asking.
  */
-function isRepeating(event: CalendarEvent): boolean {
-  return Boolean(event.recurrence) || Boolean(event.google?.seriesId);
-}
+type SeriesDay = {
+  series: CalendarEvent;
+  occurrence: CalendarOccurrenceSelection;
+  shown: CalendarEvent;
+};
 
-/**
- * The day of a series that was clicked, as the grid says. Opened without
- * one, a Google day is its own and a CronCal series' is its first.
- */
-function occurrenceFor(
+/** The series day `event` is, from the day the grid says was clicked, or null for a one-off. */
+function seriesDayOf(
   event: CalendarEvent,
   selected: CalendarOccurrenceSelection | null | undefined,
-): CalendarOccurrenceSelection | null {
-  if (selected) return selected;
-  return isRepeating(event) ? { start: new Date(event.start_time), end: new Date(event.end_time) } : null;
+  events: readonly CalendarEvent[],
+): SeriesDay | null {
+  // Opened without a day, a Google day is its own, and a CronCal series' its first.
+  const day = selected ?? { start: new Date(event.start_time), end: new Date(event.end_time) };
+  if (event.google?.seriesId) return { series: event, occurrence: day, shown: event };
+  if (event.recurrence) {
+    return { series: event, occurrence: day, shown: { ...event, start_time: day.start.toISOString(), end_time: day.end.toISOString() } };
+  }
+  const series = event.recurrence_parent_id ? events.find((entry) => entry.id === event.recurrence_parent_id && entry.recurrence) : null;
+  const place = series ? placeOfChangedDay(series, event) : null;
+  return series && place ? { series, occurrence: place, shown: { ...event, recurrence: series.recurrence } } : null;
 }
 
 /** The scope a Google save is sent with: a one-off has only itself. */
@@ -276,8 +243,7 @@ function notCarriedWarning(count: number): string {
  */
 type ScopeRequest = {
   action: "save" | "delete" | "move";
-  event: CalendarEvent;
-  occurrence: CalendarOccurrenceSelection;
+  day: SeriesDay;
   options: RecurrenceEditScope[];
   /** For a save: what the form sent, and the day as the form showed it. */
   save?: { eventData: Omit<CalendarEvent, "id" | "created_at">; shown: CalendarEvent };
@@ -285,12 +251,14 @@ type ScopeRequest = {
   moveTo?: CalendarOccurrenceSelection;
   /** Asked over the event form, which closes with it once it is answered. */
   fromForm: boolean;
+  /** Names what this request makes, so pressing again after a failure cannot make it twice. */
+  requestId: string;
 };
 
 const SCOPE_TITLES: Record<ScopeRequest["action"], string> = {
-  save: "Edit recurring event",
-  delete: "Delete recurring event",
-  move: "Move recurring event",
+  save: "Edit repeating event",
+  delete: "Delete repeating event",
+  move: "Move repeating event",
 };
 
 /** An event's own fields, without the row's id and creation time. */
@@ -306,14 +274,8 @@ function eventFields(event: CalendarEvent): Omit<CalendarEvent, "id" | "created_
 type EditingContext = {
   originalEvent: CalendarEvent;
   draftEvent: CalendarEvent;
-  occurrence: CalendarOccurrenceSelection | null;
+  day: SeriesDay | null;
 };
-
-/** A day of a CronCal series as the form shows it: the series, at that day's times. */
-function draftForDay(event: CalendarEvent, occurrence: CalendarOccurrenceSelection | null): CalendarEvent {
-  if (!event.recurrence || !occurrence) return event;
-  return { ...event, start_time: occurrence.start.toISOString(), end_time: occurrence.end.toISOString() };
-}
 
 /** A Google series' repeat, for the form: being read, read, or not readable. */
 type SeriesRepeatState = GoogleSeriesRepeat | "loading" | "failed" | null;
@@ -461,6 +423,14 @@ export default function CalendarPage() {
     return () => window.removeEventListener(GOOGLE_CHANGED_EVENT, recheck);
   }, []);
 
+  /* A Google refusal that only connecting again fixes: shown as the Reconnect row, with Google's events put away. */
+  const showGoogleReconnect = useCallback(() => {
+    setGoogleConnected(false);
+    rememberConnection("google", false);
+    setGoogleStatus("reconnect");
+    setShowGoogleEvents(false);
+  }, []);
+
   // ─── Fetch events ────────────────────────────────────────────────
 
   const fetchEventsForRange = useCallback(async (
@@ -478,9 +448,11 @@ export default function CalendarPage() {
       ? fetchGoogleEvents(range.startIso, range.endIso, signal)
       : null;
     googleRequest?.catch(() => {});
+    // Noted now: an event changed while these are out makes them stale (lib/page-cache).
+    const startedAt = cacheGeneration();
 
     const localEvents = await fetchCalendarEvents(range.startIso, range.endIso, signal);
-    setEventCache(range.view, range.startIso, range.endIso, false, localEvents);
+    writeEventCache(getEventCacheKey(range.view, range.startIso, range.endIso, false), range.startIso, range.endIso, localEvents, startedAt);
 
     if (signal.aborted) {
       throw new DOMException("Aborted", "AbortError");
@@ -499,26 +471,31 @@ export default function CalendarPage() {
     try {
       const googleEvents = await googleRequest;
       const merged = [...localEvents, ...googleEvents];
-      setEventCache(range.view, range.startIso, range.endIso, true, merged);
+      writeEventCache(range.cacheKey, range.startIso, range.endIso, merged, startedAt);
       return merged;
     } catch (error) {
       if (isAbortError(error)) {
         throw error;
+      }
+      // Google no longer accepts the connection (a revoked grant): the sidebar's Reconnect row says so.
+      if (error instanceof GoogleRouteError && error.reconnect) {
+        showGoogleReconnect();
+        return localEvents;
       }
       if (options.surfaceGoogleErrors) {
         setErrorMessage(getErrorMessage(error, "Google Calendar couldn't be loaded. Reconnect it in Settings if this keeps happening."));
       }
       return localEvents;
     }
-  }, []);
+  }, [showGoogleReconnect]);
 
   const prefetchRange = useCallback((range: EventRangeDescriptor) => {
-    const cached = eventCache.get(range.cacheKey);
+    const cached = readEventCache(range.cacheKey);
     if (isFresh(cached) || prefetchInFlight.has(range.cacheKey)) return;
 
     prefetchInFlight.add(range.cacheKey);
     scheduleIdleTask(() => {
-      if (isFresh(eventCache.get(range.cacheKey))) {
+      if (isFresh(readEventCache(range.cacheKey))) {
         prefetchInFlight.delete(range.cacheKey);
         return;
       }
@@ -552,7 +529,7 @@ export default function CalendarPage() {
   const loadEvents = useCallback(async (options?: { force?: boolean; deferNetwork?: boolean }) => {
     const force = options?.force ?? false;
     const deferNetwork = options?.deferNetwork ?? false;
-    const cached = eventCache.get(eventRange.cacheKey);
+    const cached = readEventCache(eventRange.cacheKey);
     const fresh = isFresh(cached);
 
     eventAbortRef.current?.abort();
@@ -651,6 +628,41 @@ export default function CalendarPage() {
     };
   }, [selectedKey]);
 
+  // ─── The sidebar's counts ────────────────────────────────────────
+
+  /*
+   * Today, this week and this month: of the real today, not of the month on
+   * screen, and turning over at midnight. Read from the events on screen when
+   * their window holds those days, and otherwise from today's own window,
+   * cached or loaded beside it. Read again whenever the events on screen are,
+   * so a save shows in the counts too.
+   */
+  const today = useToday();
+  const weekStart = useWeekStart();
+  const spans = useMemo(() => countSpans(today, weekStart), [today, weekStart]);
+  const countFirst = spans.week.first < spans.month.first ? spans.week.first : spans.month.first;
+  const countLast = spans.week.last > spans.month.last ? spans.week.last : spans.month.last;
+  const screenHoldsCounts = new Date(eventRange.startIso).getTime() <= fromDateStr(countFirst).getTime() &&
+    new Date(eventRange.endIso).getTime() >= fromDateStr(shiftDateStr(countLast, 1)).getTime() - 1;
+  const todayRange = useMemo(
+    () => buildEventRangeDescriptor(view, startOfMonth(fromDateStr(today)), googleEventsEnabled),
+    [googleEventsEnabled, today, view],
+  );
+  const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([]);
+
+  useEffect(() => {
+    if (screenHoldsCounts) return;
+    const cached = readEventCache(todayRange.cacheKey);
+    if (cached) setTodayEvents(cached.events);
+    if (isFresh(cached)) return;
+    const controller = new AbortController();
+    fetchEventsForRange(todayRange, controller.signal, { surfaceGoogleErrors: false }).then(
+      (loaded) => { if (!controller.signal.aborted) setTodayEvents(loaded); },
+      (error) => { if (!isAbortError(error)) console.warn("Loading today's events for the counts failed:", error); },
+    );
+    return () => controller.abort();
+  }, [events, fetchEventsForRange, screenHoldsCounts, todayRange]);
+
   // ─── Event handlers ──────────────────────────────────────────────
 
   function handleEventOpen(event: CalendarEvent, occurrence?: { start: Date; end: Date }) {
@@ -710,13 +722,24 @@ export default function CalendarPage() {
   function forgetGoogleSeries(scope: RecurrenceEditScope) {
     seriesRepeatRequests.current.clear();
     seriesRepeatAnswers.current.clear();
-    if (scope !== "single") eventCache.clear();
+    if (scope !== "single") invalidateEventCache();
   }
 
-  function askScope(request: ScopeRequest) {
+  /** A failure from Google that only connecting again fixes also turns the sidebar's row to Reconnect. */
+  function noteGoogleFailure(error: unknown) {
+    if (error instanceof GoogleRouteError && error.reconnect) showGoogleReconnect();
+  }
+
+  /** After a change: the windows it touched are dropped, and the events on screen read again. */
+  async function reloadAfterChange(...changed: ({ start_time?: string; end_time?: string; recurrence?: CalendarEvent["recurrence"] } | null | undefined)[]) {
+    for (const event of changed) invalidateEventCache(event);
+    await loadEvents({ force: true });
+  }
+
+  function askScope(request: Omit<ScopeRequest, "requestId">) {
     setScopeError("");
     setScopeChoice(request.options[0]);
-    setScopeRequest(request);
+    setScopeRequest({ ...request, requestId: crypto.randomUUID() });
   }
 
   /* Cancel: only the question closes, so the form under it keeps its changes. */
@@ -728,10 +751,10 @@ export default function CalendarPage() {
 
   /** The form opens on the day that was clicked; which days a change is for is asked at Save. */
   function handleEditFromDetail(event: CalendarEvent) {
-    const occurrence = occurrenceFor(event, selectedOccurrence);
+    const day = seriesDayOf(event, selectedOccurrence, events);
     setSelectedEvent(null);
     setSelectedOccurrence(null);
-    setEditingContext({ originalEvent: event, draftEvent: draftForDay(event, occurrence), occurrence });
+    setEditingContext({ originalEvent: event, draftEvent: day?.shown ?? event, day });
 
     const seriesId = event.google?.seriesId ?? null;
     editingSeries.current = seriesId;
@@ -757,42 +780,50 @@ export default function CalendarPage() {
 
   async function handleDeleteFromDetail(eventId: string) {
     const event = events.find((entry) => entry.id === eventId);
-    const occurrence = event ? occurrenceFor(event, selectedOccurrence) : null;
-    if (event && isRepeating(event) && occurrence) {
+    const day = event ? seriesDayOf(event, selectedOccurrence, events) : null;
+    if (day) {
       setSelectedEvent(null);
       setSelectedOccurrence(null);
-      askScope({ action: "delete", event, occurrence, options: scopeOptions(event, false), fromForm: false });
+      askScope({ action: "delete", day, options: scopeOptions(day.series, false), fromForm: false });
       return;
     }
 
     setErrorMessage("");
-    await deleteCalendarEvent(eventId, event?.google_event_id);
+    try {
+      await deleteCalendarEvent(eventId, event?.google_event_id);
+    } catch (error) {
+      noteGoogleFailure(error);
+      throw error;
+    }
     setSelectedEvent(null);
     setSelectedOccurrence(null);
-    invalidateEventCacheForEventLike(event);
-    await loadEvents({ force: true });
+    await reloadAfterChange(event);
   }
 
   async function handleCreateSave(eventData: Omit<CalendarEvent, "id" | "created_at">) {
     setErrorMessage("");
-    const { event: created } = await createCalendarEvent(eventData);
+    let created: CalendarEvent;
+    try {
+      ({ event: created } = await createCalendarEvent(eventData));
+    } catch (error) {
+      noteGoogleFailure(error);
+      throw error;
+    }
     setCreatingEvent(null);
-    invalidateEventCacheForEventLike(created);
     // A new Google series arrives as its first day, without its rule; the form's says it repeats.
-    invalidateEventCacheForEventLike(eventData);
-    await loadEvents({ force: true });
+    await reloadAfterChange(created, eventData);
   }
 
   async function handleEditSave(eventData: Omit<CalendarEvent, "id" | "created_at">) {
     if (!editingContext) return;
-    const { originalEvent, draftEvent, occurrence } = editingContext;
+    const { originalEvent, draftEvent, day } = editingContext;
     const shown = shownDay(draftEvent);
 
     /*
      * A day of a series: if anything changed, ask which days it is for, over
      * the form. Nothing changed, nothing to ask.
      */
-    if (isRepeating(originalEvent) && occurrence) {
+    if (day) {
       const changes = eventChanges(eventData, shown);
       if (Object.keys(changes).length === 0) {
         handleCloseModals();
@@ -800,9 +831,8 @@ export default function CalendarPage() {
       }
       askScope({
         action: "save",
-        event: originalEvent,
-        occurrence,
-        options: scopeOptions(originalEvent, Boolean(changes.repeat)),
+        day,
+        options: scopeOptions(day.series, Boolean(changes.repeat)),
         save: { eventData, shown },
         fromForm: true,
       });
@@ -810,98 +840,109 @@ export default function CalendarPage() {
     }
 
     setErrorMessage("");
-    if (originalEvent.id.startsWith("google_") && originalEvent.google_event_id) {
-      const changes = buildGoogleEventPatch(eventData, shown);
-      if (Object.keys(changes).length > 0) await updateGoogleEvent(originalEvent.google_event_id, changes, "single");
-      forgetGoogleSeries(changes.repeat ? "all" : "single");
-    } else if (eventData.sync_to_google) {
-      // A CronCal event moved into Google with the form's Google switch.
-      await moveCalendarEventToGoogle(originalEvent.id, eventData);
-    } else {
-      await updateCalendarEvent(originalEvent.id, eventData);
+    try {
+      if (originalEvent.id.startsWith("google_") && originalEvent.google_event_id) {
+        const changes = buildGoogleEventPatch(eventData, shown);
+        if (Object.keys(changes).length > 0) await updateGoogleEvent(originalEvent.google_event_id, changes, "single");
+        forgetGoogleSeries(changes.repeat ? "all" : "single");
+      } else if (eventData.sync_to_google) {
+        // A CronCal event moved into Google with the form's Google switch.
+        await moveCalendarEventToGoogle(originalEvent.id, eventData);
+      } else {
+        await updateCalendarEvent(originalEvent.id, eventData);
+      }
+    } catch (error) {
+      noteGoogleFailure(error);
+      throw error;
     }
 
     setEditingContext(null);
-    invalidateEventCacheForEventLike(originalEvent);
-    invalidateEventCacheForEventLike(eventData);
-    await loadEvents({ force: true });
+    await reloadAfterChange(originalEvent, eventData);
   }
 
   async function handleEditDelete(_eventId: string) {
     if (!editingContext) return;
-    const { originalEvent, occurrence } = editingContext;
-    if (isRepeating(originalEvent) && occurrence) {
-      askScope({ action: "delete", event: originalEvent, occurrence, options: scopeOptions(originalEvent, false), fromForm: true });
+    const { originalEvent, day } = editingContext;
+    if (day) {
+      askScope({ action: "delete", day, options: scopeOptions(day.series, false), fromForm: true });
       return;
     }
 
     setErrorMessage("");
-    await deleteCalendarEvent(originalEvent.id, originalEvent.google_event_id);
+    try {
+      await deleteCalendarEvent(originalEvent.id, originalEvent.google_event_id);
+    } catch (error) {
+      noteGoogleFailure(error);
+      throw error;
+    }
     setEditingContext(null);
-    invalidateEventCacheForEventLike(originalEvent);
-    await loadEvents({ force: true });
+    await reloadAfterChange(originalEvent);
   }
 
   /** A save for the days chosen. Returns what the page should say afterwards, if anything. */
   async function saveForScope(request: ScopeRequest, scope: RecurrenceEditScope): Promise<string> {
-    const { event, occurrence, save } = request;
+    const { day: { series, occurrence }, save, requestId } = request;
     if (!save) return "";
     const { eventData, shown } = save;
-    if (event.source === "google" && event.google_event_id) {
+    if (series.source === "google" && series.google_event_id) {
       // Only what was changed on the day goes to the days chosen.
       const changes = buildGoogleEventPatch(eventData, shown);
-      const { notCarried } = await updateGoogleEvent(event.google_event_id, changes, googleScope(event, scope));
+      const { notCarried } = await updateGoogleEvent(series.google_event_id, changes, googleScope(series, scope));
       forgetGoogleSeries(changes.repeat ? "all" : scope);
       return notCarried > 0 ? notCarriedWarning(notCarried) : "";
     }
     if (scope === "single") {
-      await applyRecurringOccurrenceEdit(event, occurrence, eventData);
+      await applyRecurringOccurrenceEdit(series, occurrence, eventData);
     } else if (scope === "following") {
-      await applyRecurringFollowingEdit(event, occurrence, eventData);
+      await applyRecurringFollowingEdit(series, occurrence, eventData, shown, requestId);
     } else {
-      await applyRecurringSeriesEdit(event, occurrence, eventData, shown);
+      await applyRecurringSeriesEdit(series, occurrence, eventData, shown);
     }
     return "";
   }
 
   /* A dragged day of a series, for the days chosen: the series moves with it. */
   async function moveForScope(request: ScopeRequest, scope: RecurrenceEditScope): Promise<string> {
-    const { event, occurrence, moveTo } = request;
+    const { day: { series, occurrence, shown }, moveTo, requestId } = request;
     if (!moveTo) return "";
     const moved = { start_time: moveTo.start.toISOString(), end_time: moveTo.end.toISOString() };
-    if (event.source === "google" && event.google_event_id) {
-      const { notCarried } = await updateGoogleEvent(event.google_event_id, buildGoogleEventPatch(moved, event), scope);
+    if (series.source === "google" && series.google_event_id) {
+      const { notCarried } = await updateGoogleEvent(series.google_event_id, buildGoogleEventPatch(moved, series), scope);
       forgetGoogleSeries(scope);
       return notCarried > 0 ? notCarriedWarning(notCarried) : "";
     }
-    const movedFields = { ...eventFields(event), ...moved };
+    const movedFields = { ...eventFields(shown), ...moved };
     if (scope === "single") {
-      await applyRecurringOccurrenceEdit(event, occurrence, movedFields);
+      await applyRecurringOccurrenceEdit(series, occurrence, movedFields);
     } else if (scope === "following") {
-      await applyRecurringFollowingEdit(event, occurrence, movedFields);
+      await applyRecurringFollowingEdit(series, occurrence, movedFields, shown, requestId);
     } else {
-      await applyRecurringSeriesEdit(event, occurrence, movedFields, draftForDay(event, occurrence));
+      await applyRecurringSeriesEdit(series, occurrence, movedFields, shown);
     }
     return "";
   }
 
   async function deleteForScope(request: ScopeRequest, scope: RecurrenceEditScope): Promise<void> {
-    const { event, occurrence } = request;
-    if (event.source === "google") {
-      await deleteCalendarEvent(event.id, event.google_event_id, googleScope(event, scope));
+    const { day: { series, occurrence } } = request;
+    if (series.source === "google") {
+      await deleteCalendarEvent(series.id, series.google_event_id, googleScope(series, scope));
       forgetGoogleSeries(scope);
     } else if (scope === "single") {
-      await deleteRecurringOccurrence(event, occurrence);
+      await deleteRecurringOccurrence(series, occurrence);
     } else if (scope === "following") {
-      await deleteRecurringFollowing(event, occurrence);
+      // From the series' first day, this is the whole series (supabase/schema.sql).
+      await deleteRecurringFollowing(series, occurrence);
     } else {
-      await deleteCalendarEvent(event.id, event.google_event_id);
+      await deleteCalendarEvent(series.id, series.google_event_id);
     }
   }
 
   /*
    * Confirm. A failure stays in the question, with the form still under it,
-   * so it can be tried again or cancelled back to the changes.
+   * so it can be tried again or cancelled back to the changes. Each choice is
+   * written whole or not at all (lib/calendar-events), and the events on
+   * screen are read again behind the question, in case the failure was only
+   * the answer getting lost on its way back.
    */
   async function confirmScope() {
     if (!scopeRequest || scopeBusy) return;
@@ -919,17 +960,17 @@ export default function CalendarPage() {
 
       if (request.fromForm) handleCloseModals();
       else closeScopePicker();
-      invalidateEventCacheForEventLike(request.event);
-      if (request.save) invalidateEventCacheForEventLike(request.save.eventData);
-      await loadEvents({ force: true });
+      await reloadAfterChange(request.day.series, request.save?.eventData);
       if (warning) setNotice({ tone: "info", message: warning });
     } catch (error) {
+      noteGoogleFailure(error);
       const fallback = request.action === "delete"
         ? "Could not delete that event. Try again."
         : request.action === "move"
           ? "Could not move that event. Try again."
           : "Could not save these changes. Try again.";
       setScopeError(getErrorMessage(error, fallback));
+      void reloadAfterChange(request.day.series);
     } finally {
       setScopeBusy(false);
     }
@@ -938,8 +979,8 @@ export default function CalendarPage() {
   /*
    * An event dragged on the time grid. One-off and Google events move at
    * once, on screen first and then saved, and put back if the save fails.
-   * A recurring event asks which occurrences to move, as Edit does, and a
-   * Google occurrence is its own event (Google sends them expanded).
+   * A day of a series asks which days to move, as Edit does, and a Google
+   * day is its own event (Google sends them expanded).
    */
   async function saveMovedEvent(event: CalendarEvent, start: Date, end: Date) {
     const moved = { start_time: start.toISOString(), end_time: end.toISOString() };
@@ -956,9 +997,9 @@ export default function CalendarPage() {
     start: Date,
     end: Date,
   ) {
-    const day = occurrenceFor(event, occurrence);
-    if (isRepeating(event) && day) {
-      askScope({ action: "move", event, occurrence: day, moveTo: { start, end }, options: scopeOptions(event, false), fromForm: false });
+    const day = seriesDayOf(event, occurrence, events);
+    if (day) {
+      askScope({ action: "move", day, moveTo: { start, end }, options: scopeOptions(day.series, false), fromForm: false });
       return;
     }
 
@@ -969,10 +1010,9 @@ export default function CalendarPage() {
     try {
       setErrorMessage("");
       await saveMovedEvent(event, start, end);
-      invalidateEventCacheForEventLike(event);
-      invalidateEventCacheForEventLike({ ...event, start_time: start.toISOString(), end_time: end.toISOString() });
-      await loadEvents({ force: true });
+      await reloadAfterChange(event, { ...event, start_time: start.toISOString(), end_time: end.toISOString() });
     } catch (error) {
+      noteGoogleFailure(error);
       setEvents(previous);
       setErrorMessage(getErrorMessage(error, "Could not move that event."));
     }
@@ -1001,6 +1041,8 @@ export default function CalendarPage() {
       currentDate={currentDate}
       highlightWindow={view === "week" ? weekWindow : null}
       events={events}
+      countEvents={screenHoldsCounts ? events : todayEvents}
+      today={today}
       onDateChange={setCurrentDate}
       googleStatus={googleStatus}
       showGoogleEvents={showGoogleEvents}
@@ -1055,7 +1097,7 @@ export default function CalendarPage() {
           background: "var(--c-surface)",
           border: "1px solid var(--c-border)",
           borderRadius: "var(--ui-radius-lg)",
-          boxShadow: "var(--task-shadow)",
+          boxShadow: "var(--card-shadow)",
           overflow: "hidden",
         }}>
           {coldLoadingEvents ? (
@@ -1107,6 +1149,7 @@ export default function CalendarPage() {
       {selectedEvent && !editingContext && (
         <EventDetailPanel
           event={selectedEvent}
+          series={selectedEvent.recurrence_parent_id ? seriesDayOf(selectedEvent, selectedOccurrence, events)?.series : undefined}
           occurrence={selectedOccurrence ?? undefined}
           onClose={handleCloseModals}
           onEdit={handleEditFromDetail}

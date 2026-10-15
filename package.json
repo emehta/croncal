@@ -1,8 +1,8 @@
 {
   "name": "croncal",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
-  "description": "A calendar with repeats, drag to move and two-way Google Calendar sync, on your own database.",
+  "description": "A calendar with repeats, drag to move and two-way Google Calendar sync.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
     "node": ">=22.18"

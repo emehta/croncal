@@ -10,7 +10,7 @@
  * comes from the window on screen.
  */
 
-import { DAYS_SHORT, MONTHS_SHORT } from "@/lib/date-utils";
+import { DAYS_SHORT, MONTHS_SHORT, addMonthsClamped } from "@/lib/date-utils";
 
 export interface DayWindow {
   /** Local midnight of the first visible day. */
@@ -128,4 +128,14 @@ export function resolveWeekWindow(currentDate: Date, reportedStart: Date | null,
     if (isInWindow(currentDate, reported)) return reported;
   }
   return dayWindow(centredWindowStart(currentDate, count), count);
+}
+
+/**
+ * The date the header's arrows go to: a day, a week or a month on. A month
+ * on keeps the day, or the month's last day when it is shorter: 31 January
+ * goes to 28 February, not on past it to 3 March.
+ */
+export function stepDate(view: "day" | "week" | "month", date: Date, direction: -1 | 1): Date {
+  if (view === "month") return addMonthsClamped(date, direction);
+  return plusDays(date, view === "week" ? direction * 7 : direction);
 }

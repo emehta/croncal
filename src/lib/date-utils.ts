@@ -185,16 +185,6 @@ export function monthKeyStart(monthKey: string): string {
   return `${monthKey}-01`;
 }
 
-/** A month key, or a date key's month, in full: "October 2026". */
-export function formatMonthKey(key: string): string {
-  return `${MONTH_NAMES[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
-}
-
-/** A month key, or a date key's month, short: "Oct 2026". */
-export function formatMonthKeyShort(key: string): string {
-  return `${MONTHS_SHORT[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
-}
-
 /** The last day of a month key, as a date key. */
 export function monthKeyEnd(monthKey: string): string {
   const [y, m] = monthKey.split("-").map(Number);
@@ -240,41 +230,6 @@ export function shiftDateStrByMonths(dateStr: string, months: number): string {
  * and these run for every cell of a month grid and every row of a list. The
  * output is exactly toLocaleDateString's en-US with each one's options.
  */
-
-/** Weekday name: "Monday". */
-export function formatDayName(date: Date): string {
-  return DAY_NAMES[date.getDay()];
-}
-
-/** Long date: "March 5, 2026". */
-export function formatDateLong(date: Date): string {
-  return `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-}
-
-/** Short date: "Mar 5". */
-export function formatDateShort(date: Date): string {
-  return `${MONTHS_SHORT[date.getMonth()]} ${date.getDate()}`;
-}
-
-/**
- * Medium date: "Mar 5, 2026".
- *
- * The short form for a list that spans years, where a row reading "Mar 5" is
- * ambiguous and "March 5, 2026" is wider than the column it has to sit in.
- */
-export function formatDateMedium(date: Date): string {
-  return `${MONTHS_SHORT[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-}
-
-/**
- * Medium date with weekday: "Mon, Mar 5".
- *
- * The long form is three lines of heading on a 390px phone, and the year is
- * the least useful part of a date you are reading today.
- */
-export function formatDateMediumWithWeekday(date: Date): string {
-  return `${DAYS_SHORT[date.getDay()]}, ${MONTHS_SHORT[date.getMonth()]} ${date.getDate()}`;
-}
 
 /** Long date with weekday: "Monday, March 5, 2026". */
 export function formatDateLongWithWeekday(date: Date): string {

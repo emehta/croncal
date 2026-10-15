@@ -25,7 +25,7 @@ import {
   getTimeZoneParts,
   zonedDateTimeToUtc,
 } from "@/lib/calendar-timezone";
-import { daysBetweenDateStrs, shiftDateStr, weekdayOfDateStr } from "@/lib/date-utils";
+import { DAY_NAMES, DAYS_SHORT, daysBetweenDateStrs, shiftDateStr, weekdayOfDateStr } from "@/lib/date-utils";
 
 /** A start or end as Google writes it: a day, or an instant with its zone. */
 export type GoogleTime = { date?: string; dateTime?: string; timeZone?: string };
@@ -49,7 +49,6 @@ export type GoogleEventResource = {
 
 /** Google's day codes, Sunday first, the order of `Date.getDay()`. */
 const DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
-const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const WEEKDAY_CODES = ["MO", "TU", "WE", "TH", "FR"];
 
 /**
@@ -92,7 +91,7 @@ export function shiftGoogleTime(time: GoogleTime, days: number, zone: string): G
 }
 
 /** An instance's place in its series: a day, or the day at the series' own time. */
-export function slotOn(dateStr: string, seriesStart: GoogleTime, zone: string): GoogleTime {
+function slotOn(dateStr: string, seriesStart: GoogleTime, zone: string): GoogleTime {
   if (seriesStart.date) return { date: dateStr };
   const tz = seriesStart.timeZone || zone;
   const clock = wallClock(seriesStart, tz);
@@ -281,7 +280,7 @@ export function describeCustomRecurrence(lines: readonly string[] | null | undef
     case "DAILY":
       return byDay.length === 0 && interval > 1 ? `Every ${interval} days` : fallback;
     case "WEEKLY": {
-      const names = byDay.map((code) => DAY_NAMES_SHORT[DAY_CODES.indexOf(code as typeof DAY_CODES[number])]);
+      const names = byDay.map((code) => DAYS_SHORT[DAY_CODES.indexOf(code as typeof DAY_CODES[number])]);
       if (names.length === 0 || names.some((name) => !name)) return interval > 1 ? `Every ${interval} weeks` : fallback;
       return `${interval > 1 ? `Every ${interval} weeks` : "Every week"} on ${joinNames(names)}`;
     }
@@ -291,7 +290,7 @@ export function describeCustomRecurrence(lines: readonly string[] | null | undef
       const dayIndex = match ? DAY_CODES.indexOf(match[2] as typeof DAY_CODES[number]) : -1;
       if (!nth || dayIndex < 0) return fallback;
       const every = interval > 1 ? `Every ${interval} months` : "Every month";
-      return `${every} on the ${nth} ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dayIndex]}`;
+      return `${every} on the ${nth} ${DAY_NAMES[dayIndex]}`;
     }
     default:
       return fallback;

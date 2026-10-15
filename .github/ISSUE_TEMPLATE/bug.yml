@@ -26,7 +26,7 @@ body:
     attributes:
       label: CronCal version
       description: The `version` line in package.json, in the croncal folder.
-      placeholder: "1.0.0"
+      placeholder: "1.0.1"
   - type: dropdown
     id: system
     attributes:
@@ -47,5 +47,6 @@ body:
     attributes:
       label: Installed with
       options:
+        - publik
         - The download line
         - With Git

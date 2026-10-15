@@ -21,12 +21,16 @@ import { useTimeFormat, formatTime } from "@/lib/time-format";
 import { zoneLabel, zoneOffset } from "@/lib/calendar-timezone";
 import StatusBanner from "@/components/StatusBanner";
 import GoogleBrandIcon from "@/components/GoogleBrandIcon";
-import { DAYS_SHORT, MONTHS_SHORT, isSameDay } from "@/lib/date-utils";
+import { DAYS_SHORT, MONTHS_SHORT, fromDateStr } from "@/lib/date-utils";
+import { occurrenceDays } from "@/lib/event-days";
 import { DeleteAction, DialogButton, DialogCard, DialogFooter } from "@/components/form/Dialog";
-import { DetailRow, FieldLabel, RichText, ViewTitle } from "@/components/form/fields";
+import { DetailRow, FieldLabel, ViewTitle } from "@/components/form/fields";
+import RichText from "@/components/form/RichText";
 
 interface EventDetailPanelProps {
   event: CalendarEvent;
+  /** For a day of a CronCal series changed on its own: its series, whose repeat it still says. */
+  series?: CalendarEvent;
   occurrence?: { start: Date; end: Date };
   onClose: () => void;
   onEdit: (event: CalendarEvent) => void;
@@ -56,6 +60,7 @@ function formatZone(timeZone: string, at: Date): string {
 
 export default function EventDetailPanel({
   event,
+  series,
   occurrence,
   onClose,
   onEdit,
@@ -71,14 +76,17 @@ export default function EventDetailPanel({
   const timeStr = event.all_day
     ? "All day"
     : `${formatTime(start, fmt)} to ${formatTime(end, fmt)} · ${formatDuration(start, end)}`;
-  const dateStr = isSameDay(start, end)
-    ? formatDateLine(start)
-    : `${formatDateLine(start)} to ${formatDateLine(end)}`;
+  // An all-day event's own dates, wherever this is opened (lib/event-days).
+  const days = occurrenceDays(event, start, end);
+  const dateStr = days.first === days.last
+    ? formatDateLine(fromDateStr(days.first))
+    : `${formatDateLine(fromDateStr(days.first))} to ${formatDateLine(fromDateStr(days.last))}`;
   const priority = EVENT_PRIORITIES.find((choice) => choice.value === event.importance);
   const type = EVENT_TYPES.find((choice) => choice.value === event.event_type);
   // A day of a Google series arrives without its rule: it says it repeats, and Edit reads how.
-  const recurrenceDesc = event.recurrence
-    ? describeRecurrence(event.recurrence, new Date(event.start_time))
+  const rule = event.recurrence ? event : series?.recurrence ? series : null;
+  const recurrenceDesc = rule?.recurrence
+    ? describeRecurrence(rule.recurrence, new Date(rule.start_time))
     : event.google?.repeatLabel ?? (event.google?.seriesId ? "Repeats" : null);
 
   async function handleDelete() {
@@ -118,7 +126,7 @@ export default function EventDetailPanel({
   const hasDetails = Boolean(event.participants || event.conferencing || event.meeting_notes || event.location);
 
   return (
-    <DialogCard label="Event details" heading="Event" onClose={onClose} busy={deleting} footer={footer} closeLabel="Close event details">
+    <DialogCard label="Event details" heading="Event" onClose={onClose} busy={deleting} footer={footer}>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <ViewTitle color={event.color}>{event.title}</ViewTitle>
 

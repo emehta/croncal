@@ -3,19 +3,11 @@
 import { useSyncExternalStore } from "react";
 import { APP_PHONE_BREAKPOINT } from "@/lib/styles";
 
-/**
- * The viewport width, as a reactive value.
- *
- * `useSyncExternalStore` rather than `useState` + a resize effect: the effect
- * version has to seed state with a guessed width and correct it after the first
- * paint, which flashes the desktop layout on a phone.
- *
- * `serverWidth` is what SSR and the first client render see. Pick the value that
- * matches the layout you would rather show for one frame if the guess is wrong.
+/*
+ * Media queries read through `useSyncExternalStore` rather than `useState` and
+ * a resize effect: the effect version has to seed state with a guess and
+ * correct it after the first paint, which flashes the desktop layout on a phone.
  */
-export function useViewportWidth(serverWidth = 1600): number {
-  return useSyncExternalStore(subscribe, () => window.innerWidth, () => serverWidth);
-}
 
 interface WidthStore {
   subscribe: (onChange: () => void) => () => void;
@@ -63,9 +55,4 @@ export function useMinWidth(minWidth: number, serverValue = true): boolean {
  */
 export function usePhone(): boolean {
   return !useMinWidth(APP_PHONE_BREAKPOINT);
-}
-
-function subscribe(callback: () => void): () => void {
-  window.addEventListener("resize", callback);
-  return () => window.removeEventListener("resize", callback);
 }

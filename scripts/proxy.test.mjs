@@ -30,7 +30,7 @@ const moved = async (response) => {
   return { status: response.status, location: response.headers.get("location"), to: body.match(/location\.replace\("([^"]+)"\)/)?.[1] ?? null };
 };
 check("a page on 127.0.0.1 moves to localhost, same port, path and query, with no HTTP redirect for Next to rewrite",
-  await moved(proxy(request("http://127.0.0.1:3102/calendar?task=1&x=2"))), { status: 200, location: null, to: "http://localhost:3102/calendar?task=1&x=2" });
+  await moved(proxy(request("http://127.0.0.1:3102/calendar?event=1&x=2"))), { status: 200, location: null, to: "http://localhost:3102/calendar?event=1&x=2" });
 check("a page on [::1] moves to localhost", (await moved(proxy(request("http://[::1]:3102/calendar")))).to, "http://localhost:3102/calendar");
 check("npm start's health check on 127.0.0.1 is answered where it is", passes(proxy(request("http://127.0.0.1:3102/api/health"))), true);
 check("the app's files on 127.0.0.1 are served where they are", passes(proxy(request("http://127.0.0.1:3102/_next/static/x.js"))), true);

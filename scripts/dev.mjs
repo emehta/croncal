@@ -19,7 +19,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
-const portArg = args.indexOf("--port");
+// The last --port wins, so `npm run develop -- --port N` overrides any before it.
+const portArg = args.lastIndexOf("--port");
 const PORT = portArg >= 0 ? Number(args[portArg + 1]) : 3202;
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const NEXT = path.join(ROOT, "node_modules", "next", "dist", "bin", "next");

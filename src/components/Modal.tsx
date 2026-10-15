@@ -67,7 +67,8 @@ export default function Modal({
   const mounted = useSyncExternalStore(subscribeToNothing, () => true, () => false);
 
   function hasBusyAction(): boolean {
-    return cardRef.current?.querySelector('[aria-busy="true"]') !== null;
+    // A busy button, or a card marked as saving, is a save or delete under way; a region that is loading is not.
+    return cardRef.current?.querySelector('button[aria-busy="true"], [data-saving="true"]') !== null;
   }
 
   /*

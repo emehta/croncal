@@ -2,7 +2,7 @@
 
 import type { InputHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { CHOICE_CHIP, CHOICE_CHIP_SELECTED, CHOICE_CHIP_UNSELECTED } from "@/lib/styles";
-import { parseRichText, looksLikeHtml, type RichNode } from "@/lib/rich-text";
+import Tooltip from "@/components/Tooltip";
 import styles from "./form.module.css";
 import { contentColor } from "@/lib/content-palette";
 
@@ -115,36 +115,6 @@ export function TextAreaField({
   );
 }
 
-/** An on/off setting, its label on the left and the switch on the right. */
-export function ToggleRow({
-  label,
-  checked,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 32 }}>
-      <span style={{ fontSize: "var(--ui-type-body-sm)", color: "var(--c-text-2)" }}>{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={styles.switch}
-      >
-        <span className={styles.switchKnob} />
-      </button>
-    </div>
-  );
-}
-
 export interface ChoiceOption<T extends string> {
   value: T;
   label: string;
@@ -228,16 +198,16 @@ export function ColorSwatches({
   return (
     <div role="group" aria-label={ariaLabel} style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "4px 2px" }}>
       {shown.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={styles.swatch}
-          title={option.label}
-          aria-label={option.label}
-          aria-pressed={option.value.toLowerCase() === value.toLowerCase()}
-          onClick={() => onChange(option.value)}
-          style={{ background: contentColor(option.value) }}
-        />
+        <Tooltip key={option.value} label={option.label}>
+          <button
+            type="button"
+            className={styles.swatch}
+            aria-label={option.label}
+            aria-pressed={option.value.toLowerCase() === value.toLowerCase()}
+            onClick={() => onChange(option.value)}
+            style={{ background: contentColor(option.value) }}
+          />
+        </Tooltip>
       ))}
     </div>
   );
@@ -250,7 +220,8 @@ export function DetailRow({ icon, children }: { icon: ReactNode; children: React
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
       <span style={{ display: "flex", color: "var(--c-text-3)", flexShrink: 0, marginTop: 2 }}>{icon}</span>
-      <div style={{ fontSize: "var(--ui-type-body-sm)", color: "var(--c-text-2)", lineHeight: 1.5, minWidth: 0 }}>
+      {/* A long address or a note of several lines wraps inside the card, never off its edge. */}
+      <div style={{ flex: "1 1 auto", fontSize: "var(--ui-type-body-sm)", color: "var(--c-text-2)", lineHeight: 1.5, minWidth: 0, overflowWrap: "anywhere", whiteSpace: "pre-line" }}>
         {children}
       </div>
     </div>
@@ -275,51 +246,4 @@ export function ViewTitle({ color, children }: { color?: string; children: React
       </h2>
     </div>
   );
-}
-
-/** Long text on a view card: formatted if it came as HTML, as written if not. */
-export function RichText({ text, empty }: { text: string | null | undefined; empty?: string }) {
-  if (!text || !text.trim()) {
-    return empty ? <p className={styles.plain} style={{ color: "var(--c-text-4)" }}>{empty}</p> : null;
-  }
-  if (!looksLikeHtml(text)) return <p className={styles.plain}>{text}</p>;
-  return <div className={styles.rich}>{renderNodes(parseRichText(text))}</div>;
-}
-
-function renderNodes(nodes: RichNode[]): ReactNode[] {
-  return nodes.map((node, index) => {
-    if (node.type === "text") return node.text;
-    const children = renderNodes(node.children);
-    switch (node.tag) {
-      case "br":
-        return <br key={index} />;
-      case "p":
-        return <p key={index}>{children}</p>;
-      case "h": {
-        const level = Math.min(6, Math.max(1, node.level ?? 3));
-        const Heading = `h${level}` as "h1";
-        return <Heading key={index}>{children}</Heading>;
-      }
-      case "strong":
-        return <strong key={index}>{children}</strong>;
-      case "em":
-        return <em key={index}>{children}</em>;
-      case "u":
-        return <u key={index}>{children}</u>;
-      case "ul":
-        return <ul key={index}>{children}</ul>;
-      case "ol":
-        return <ol key={index}>{children}</ol>;
-      case "li":
-        return <li key={index}>{children}</li>;
-      case "a":
-        return (
-          <a key={index} href={node.href} target="_blank" rel="noopener noreferrer">
-            {children}
-          </a>
-        );
-      default:
-        return <span key={index}>{children}</span>;
-    }
-  });
 }

@@ -17,21 +17,14 @@ import { EVENT_PRIORITIES, EVENT_TYPES, type CalendarEvent, type RepeatChoice } 
 import { nextHalfHour } from "@/lib/event-start";
 import type { GoogleSeriesRepeat } from "@/lib/calendar-events";
 import { nextRepeatDays } from "@/lib/recurrence";
-import { getErrorMessage, isNetworkError } from "@/lib/error-utils";
+import { getErrorMessage } from "@/lib/error-utils";
+import { GOOGLE_COLORS } from "@/lib/google-colors";
 import { addDays, toDateStr } from "@/lib/date-utils";
 import { usePhone } from "@/lib/use-viewport-width";
 import { descriptionForEditing } from "@/lib/rich-text";
 import { DeleteAction, DialogButton, DialogCard, DialogFooter } from "@/components/form/Dialog";
-import {
-  ChoiceChips,
-  ColorSwatches,
-  FieldGroup,
-  FieldRow,
-  FieldStack,
-  TextAreaField,
-  TextField,
-  ToggleRow,
-} from "@/components/form/fields";
+import { ChoiceChips, ColorSwatches, FieldGroup, FieldRow, FieldStack, TextAreaField, TextField } from "@/components/form/fields";
+import ToggleRow from "@/components/form/ToggleRow";
 import SelectField from "@/components/form/SelectField";
 import DateField, { formatFieldDate } from "@/components/form/DateField";
 import TimeField from "@/components/form/TimeField";
@@ -51,24 +44,7 @@ interface EventFormPanelProps {
   seriesRepeat?: GoogleSeriesRepeat | "loading" | "failed";
 }
 
-/*
- * Google's eleven calendar colours, the only ones an event synced with Google
- * can carry, in the order of the spectrum: reds, orange, yellow, greens,
- * blues, purples, then grey, not Google's own order, which reads as random.
- */
-const EVENT_COLORS = [
-  { value: "#D50000", label: "Tomato" },
-  { value: "#E67C73", label: "Flamingo" },
-  { value: "#F4511E", label: "Tangerine" },
-  { value: "#F6BF26", label: "Banana" },
-  { value: "#33B679", label: "Sage" },
-  { value: "#0B8043", label: "Basil" },
-  { value: "#039BE5", label: "Peacock" },
-  { value: "#3F51B5", label: "Blueberry" },
-  { value: "#7986CB", label: "Lavender" },
-  { value: "#8E24AA", label: "Grape" },
-  { value: "#616161", label: "Graphite" },
-] as const;
+/* Google's eleven, the only colours an event in Google can carry (lib/google-colors). */
 const DEFAULT_COLOR = "#33B679";
 
 const TIMEZONES = [
@@ -108,6 +84,15 @@ function buildLocalDateTime(dateStr: string, timeStr: string): Date {
 
 function toInputTimeStr(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+/** A problem with one field, said under it. */
+function FieldError({ children }: { children: string }) {
+  return (
+    <p role="alert" style={{ marginTop: 6, fontSize: "var(--ui-type-label)", color: "var(--c-danger)", lineHeight: 1.4 }}>
+      {children}
+    </p>
+  );
 }
 
 function getWholeDaySpan(start: Date, end: Date): number {
@@ -192,7 +177,7 @@ export default function EventFormPanel({
    * form the move could carry. The choice is kept apart from the default so
    * the connection check finishing after the form opened still sets it.
    */
-  const canGoToGoogle = !existingEvent || (existingEvent.source !== "google" && !existingEvent.recurrence);
+  const canGoToGoogle = !existingEvent || (existingEvent.source !== "google" && !existingEvent.recurrence && !existingEvent.recurrence_parent_id);
   const [syncChoice, setSyncChoice] = useState<boolean | null>(null);
   const syncToGoogle = Boolean(googleConnected) && canGoToGoogle && (syncChoice ?? !existingEvent);
   const [saving, setSaving] = useState(false);
@@ -200,6 +185,32 @@ export default function EventFormPanel({
   const [deleting, setDeleting] = useState(false);
   const [endManuallyEdited, setEndManuallyEdited] = useState(false);
   const [formError, setFormError] = useState("");
+  const [endError, setEndError] = useState("");
+  /*
+   * Whether anything was changed here. Closing then asks first, in the
+   * footer, so a stray Escape or a click outside the card never throws the
+   * changes away.
+   */
+  const [dirty, setDirty] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  function markEdited() {
+    setDirty(true);
+    setConfirmingDiscard(false);
+  }
+
+  function edited<T>(set: (value: T) => void): (value: T) => void {
+    return (value) => {
+      set(value);
+      markEdited();
+    };
+  }
+
+  function requestClose() {
+    if (saving || deleting) return;
+    if (dirty) setConfirmingDiscard(true);
+    else onCancel();
+  }
 
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => { titleRef.current?.focus(); }, []);
@@ -249,6 +260,10 @@ export default function EventFormPanel({
     setConfirmingDelete(false);
     setDeleting(false);
     setFormError("");
+    setEndError("");
+    setDirty(false);
+    setConfirmingDiscard(false);
+    setTitleMissing(false);
   }, [
     existingEvent,
     initialEvent,
@@ -288,7 +303,7 @@ export default function EventFormPanel({
       : zonedDateTimeToUtc(endDateStr, endTime, timezone);
 
     if (endDateTime.getTime() <= startDateTime.getTime()) {
-      setFormError("End must be after the start.");
+      setEndError("End must be after the start.");
       return;
     }
 
@@ -328,7 +343,7 @@ export default function EventFormPanel({
     } catch (error) {
       // Google says why it refused, and the reason is worth more than "Try again".
       const fallback = existingEvent ? "Could not save these changes. Try again." : "Could not create this event. Try again.";
-      setFormError(isNetworkError(error) ? "Could not reach the server. Check the connection and try again." : getErrorMessage(error, fallback));
+      setFormError(getErrorMessage(error, fallback));
     } finally {
       setSaving(false);
     }
@@ -374,12 +389,22 @@ export default function EventFormPanel({
       setEndTime(shifted.endTimeStr);
     }
     setTimezone(nextTimezone);
-    setFormError("");
+    setEndError("");
+    markEdited();
   }
 
   const heading = existingEvent ? "Edit event" : "New event";
 
-  const footer = (
+  const footer = confirmingDiscard ? (
+    <DialogFooter start={<span style={{ fontSize: "var(--ui-type-body-sm)", color: "var(--c-text-2)" }}>Discard your changes?</span>}>
+      <DialogButton variant="secondary" onClick={() => setConfirmingDiscard(false)} autoFocus>
+        Keep editing
+      </DialogButton>
+      <DialogButton variant="danger" armed onClick={onCancel}>
+        Discard
+      </DialogButton>
+    </DialogFooter>
+  ) : (
     <DialogFooter
       start={existingEvent && onDelete ? (
         <DeleteAction
@@ -391,7 +416,7 @@ export default function EventFormPanel({
         />
       ) : undefined}
     >
-      <DialogButton variant="secondary" onClick={onCancel} disabled={saving || deleting}>
+      <DialogButton variant="secondary" onClick={requestClose} disabled={saving || deleting}>
         Cancel
       </DialogButton>
       <DialogButton variant="primary" onClick={() => { void handleSave(); }} disabled={saving || deleting} busy={saving}>
@@ -404,10 +429,9 @@ export default function EventFormPanel({
     <DialogCard
       label={heading}
       heading={heading}
-      onClose={onCancel}
+      onClose={requestClose}
       busy={saving || deleting}
       footer={footer}
-      closeLabel="Close event"
     >
       <FieldStack>
         <FieldGroup label="Title" htmlFor="event-title">
@@ -420,6 +444,7 @@ export default function EventFormPanel({
             invalid={titleMissing}
             onChange={(e) => {
               setTitle(e.target.value);
+              markEdited();
               if (e.target.value.trim()) setTitleMissing(false);
             }}
             onKeyDown={(e) => {
@@ -428,6 +453,7 @@ export default function EventFormPanel({
               void handleSave();
             }}
           />
+          {titleMissing && <FieldError>Add a title.</FieldError>}
         </FieldGroup>
 
         <FieldGroup label="Description" htmlFor="event-description">
@@ -440,11 +466,12 @@ export default function EventFormPanel({
             onChange={(e) => {
               setDescription(e.target.value);
               setDescriptionEdited(true);
+              markEdited();
             }}
           />
         </FieldGroup>
 
-        <ToggleRow label="All day" checked={allDay} onChange={setAllDay} />
+        <ToggleRow label="All day" checked={allDay} onChange={(next) => { setAllDay(next); setEndError(""); markEdited(); }} />
 
         <FieldRow phone={phone}>
           <FieldGroup label="Starts">
@@ -456,7 +483,8 @@ export default function EventFormPanel({
                   if (!next) return;
                   if (!endManuallyEdited) syncEndFromNextStart(next, startTime);
                   setStartDateStr(next);
-                  setFormError("");
+                  setEndError("");
+                  markEdited();
                 }}
               />
               {!allDay && (
@@ -467,7 +495,8 @@ export default function EventFormPanel({
                     if (!next) return;
                     if (!endManuallyEdited) syncEndFromNextStart(startDateStr, next);
                     setStartTime(next);
-                    setFormError("");
+                    setEndError("");
+                    markEdited();
                   }}
                 />
               )}
@@ -478,27 +507,31 @@ export default function EventFormPanel({
               <DateField
                 ariaLabel="End date"
                 value={endDateStr}
-                invalid={Boolean(formError) && formError.startsWith("End")}
+                invalid={Boolean(endError)}
                 onChange={(next) => {
                   if (!next) return;
                   setEndDateStr(next);
                   setEndManuallyEdited(true);
-                  setFormError("");
+                  setEndError("");
+                  markEdited();
                 }}
               />
               {!allDay && (
                 <TimeField
                   ariaLabel="End time"
                   value={endTime}
+                  invalid={Boolean(endError)}
                   onChange={(next) => {
                     if (!next) return;
                     setEndTime(next);
                     setEndManuallyEdited(true);
-                    setFormError("");
+                    setEndError("");
+                    markEdited();
                   }}
                 />
               )}
             </div>
+            {endError && <FieldError>{endError}</FieldError>}
           </FieldGroup>
         </FieldRow>
 
@@ -518,7 +551,7 @@ export default function EventFormPanel({
               icon={<ArrowsClockwise size={14} />}
               value={repeatKnown ? repeat : null}
               options={repeatOptions}
-              onChange={setChosenRepeat}
+              onChange={edited(setChosenRepeat)}
               disabled={!repeatKnown}
               placeholder={seriesRepeat === "failed" ? "Could not read it from Google" : "Reading it from Google…"}
             />
@@ -538,7 +571,7 @@ export default function EventFormPanel({
               allowNone
               phone={phone}
               value={importance}
-              onChange={setImportance}
+              onChange={edited(setImportance)}
               options={EVENT_PRIORITIES}
             />
           </FieldGroup>
@@ -548,7 +581,7 @@ export default function EventFormPanel({
               allowNone
               phone={phone}
               value={eventType}
-              onChange={setEventType}
+              onChange={edited(setEventType)}
               options={EVENT_TYPES}
             />
           </FieldGroup>
@@ -561,7 +594,7 @@ export default function EventFormPanel({
               icon={<LinkSimple size={14} />}
               placeholder="Add a link"
               value={conferencing}
-              onChange={(e) => setConferencing(e.target.value)}
+              onChange={(e) => { setConferencing(e.target.value); markEdited(); }}
             />
           </FieldGroup>
           <FieldGroup label="Location" htmlFor="event-location">
@@ -570,7 +603,7 @@ export default function EventFormPanel({
               icon={<MapPin size={14} />}
               placeholder="Add a location"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              onChange={(e) => { setLocation(e.target.value); markEdited(); }}
             />
           </FieldGroup>
         </FieldRow>
@@ -581,16 +614,16 @@ export default function EventFormPanel({
             icon={<Users size={14} />}
             placeholder="Add participants"
             value={participants}
-            onChange={(e) => setParticipants(e.target.value)}
+            onChange={(e) => { setParticipants(e.target.value); markEdited(); }}
           />
         </FieldGroup>
 
         <FieldGroup label="Colour">
-          <ColorSwatches ariaLabel="Event colour" options={EVENT_COLORS} value={color} onChange={setColor} />
+          <ColorSwatches ariaLabel="Event colour" options={GOOGLE_COLORS} value={color} onChange={edited(setColor)} />
         </FieldGroup>
 
         {googleConnected && canGoToGoogle && (
-          <ToggleRow label="Sync to Google Calendar" checked={syncToGoogle} onChange={setSyncChoice} />
+          <ToggleRow label="Sync to Google Calendar" checked={syncToGoogle} onChange={edited(setSyncChoice)} />
         )}
 
         {formError && <StatusBanner message={formError} onDismiss={() => setFormError("")} />}

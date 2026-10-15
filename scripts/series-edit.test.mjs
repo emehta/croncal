@@ -10,7 +10,18 @@
  * to it, taking its skipped and changed days along.
  */
 
-import { SCOPE_LABELS, changedRowFields, dayTimesChanged, eventChanges, planSeriesMove, scopeOptions } from "@/lib/series-edit";
+import {
+  SCOPE_LABELS,
+  changedRowFields,
+  dayTimesChanged,
+  eventChanges,
+  placeOfChangedDay,
+  planAllDaysEdit,
+  planFollowingEdit,
+  planSeriesMove,
+  scopeOptions,
+  splitExceptionStarts,
+} from "@/lib/series-edit";
 import { zonedDateTimeToUtc } from "@/lib/calendar-timezone";
 
 const failures = [];
@@ -100,6 +111,64 @@ const nySeries = { ...day, timezone: NY, start_time: at("2026-10-19", "18:00", N
 plan = planSeriesMove(nySeries, { start: new Date(at("2026-11-02", "18:00", NY)), end: new Date(at("2026-11-02", "19:00", NY)) },
   { ...saved, timezone: NY, start_time: at("2026-11-02", "19:00", NY), end_time: at("2026-11-02", "20:00", NY) }, []);
 check("an hour set after the clocks change is that hour before it", plan.start_time, at("2026-10-19", "19:00", NY));
+
+/* ─── a CronCal series changed from one day on ────────────────────────── */
+
+// The series above, from 5 Oct: 14 Sep skipped (before), 12 Oct skipped (after),
+// 19 Oct changed at its place, 26 Oct moved on its own to 15:00.
+const long = { ...series, recurrence_exceptions: [at("2026-09-14", "09:00"), at("2026-10-12", "09:00")] };
+const later = [
+  { ...day, id: "o19", recurrence: null, title: "Gym 19", original_occurrence_start: at("2026-10-19", "09:00"), start_time: at("2026-10-19", "09:00"), end_time: at("2026-10-19", "10:00") },
+  { ...day, id: "o26", recurrence: null, title: "Gym 26", original_occurrence_start: at("2026-10-26", "09:00"), start_time: at("2026-10-26", "15:00"), end_time: at("2026-10-26", "16:00") },
+  { ...day, id: "o28s", recurrence: null, original_occurrence_start: at("2026-09-28", "09:00"), start_time: at("2026-09-28", "15:00"), end_time: at("2026-09-28", "16:00") },
+];
+const oct5 = { start: new Date(day.start_time), end: new Date(day.end_time) };
+const shown5 = { ...long, start_time: day.start_time, end_time: day.end_time };
+
+let following = planFollowingEdit(long, oct5, shown5, { ...saved, recurrence: null }, later);
+check("Does not repeat, from a day: one event, the form's, with no rule", [following.next.recurrence, following.next.recurrence_until, following.next.recurrence_exceptions, following.next.start_time], [null, null, [], day.start_time]);
+check("…and the changed days after it go", following.days, []);
+
+following = planFollowingEdit(long, oct5, shown5, { ...saved, title: "Gym later", start_time: at("2026-10-05", "10:00"), end_time: at("2026-10-05", "11:00") }, later);
+check("an hour later from 5 Oct: the new series starts there, at 10:00", [following.next.start_time, following.next.end_time, following.next.recurrence, following.next.title], [at("2026-10-05", "10:00"), at("2026-10-05", "11:00"), "weekly", "Gym later"]);
+check("…its skipped day moves to the new hour, and the one before 5 Oct stays with the old series", following.next.recurrence_exceptions, [at("2026-10-12", "10:00")]);
+check("…its changed days move as for all days, keeping their own changes",
+  following.days.map((d) => [d.id, d.fields.original_occurrence_start, d.fields.start_time, d.fields.title]),
+  [["o19", at("2026-10-19", "10:00"), at("2026-10-19", "10:00"), undefined], ["o26", at("2026-10-26", "10:00"), at("2026-10-26", "15:00"), undefined]]);
+
+following = planFollowingEdit(long, oct5, shown5, { ...saved, title: "Gym renamed" }, later);
+check("only renamed: the new series from 5 Oct, its days where they were",
+  [following.next.start_time, following.next.recurrence_exceptions, following.days.map((d) => d.fields)], [day.start_time, [at("2026-10-12", "09:00")], [{}, {}]]);
+
+const noRule = { ...saved, title: "Gym renamed" };
+delete noRule.recurrence;
+check("a change that says nothing of the repeat keeps it", planFollowingEdit(long, oct5, shown5, noRule, later).next.recurrence, "weekly");
+following = planFollowingEdit(long, oct5, shown5, { ...saved, recurrence: "daily" }, later);
+check("a new rule starts with no skipped or changed days", [following.next.recurrence, following.next.recurrence_exceptions, following.days], ["daily", [], []]);
+
+/* ─── a day changed on its own is still a day of its series ───────────── */
+
+const o26 = later[1];
+check("a changed day's place is the day it took over, at the series' times", placeOfChangedDay(long, o26), { start: new Date(at("2026-10-26", "09:00")), end: new Date(at("2026-10-26", "10:00")) });
+const shown26 = { ...o26, recurrence: "weekly" };
+let all = planAllDaysEdit(long, shown26, { ...shown26, location: "Pool" }, later);
+check("opened on a day moved on its own, a new location for all days moves nothing", [all.fields, all.dropDays], [{ location: "Pool", recurrence: "weekly" }, false]);
+check("…and goes to the changed days too, which keep their own times", all.days.map((d) => d.fields), [{ location: "Pool" }, { location: "Pool" }, { location: "Pool" }]);
+all = planAllDaysEdit(long, shown26, { ...shown26, start_time: at("2026-10-26", "16:00"), end_time: at("2026-10-26", "17:00") }, later);
+check("…set to 16:00 for all days, the series is at 16:00", [all.fields.start_time, all.fields.recurrence_exceptions], [at("2026-09-07", "16:00"), [at("2026-09-14", "16:00"), at("2026-10-12", "16:00")]]);
+check("…and the day it was opened on takes the form's times", all.days.find((d) => d.id === "o26").fields, { original_occurrence_start: at("2026-10-26", "16:00"), start_time: at("2026-10-26", "16:00"), end_time: at("2026-10-26", "17:00"), all_day: false, timezone: SGT });
+const ending = { ...long, recurrence_until: at("2026-12-31", "00:00") };
+check("a changed day's own end (none) is not taken for the series'", "recurrence_until" in planAllDaysEdit(ending, { ...shown26, recurrence_until: null }, { ...shown26, recurrence_until: null, location: "Pool" }, later).fields, false);
+all = planAllDaysEdit(long, { ...shown26, meeting_notes: null }, { ...shown26, meeting_notes: "Bring the agenda" }, later);
+check("new notes for all days reach the series, which Google's comparison can't see", all.fields.meeting_notes, "Bring the agenda");
+check("…but not the changed days, which keep their own", all.days.every((d) => !("meeting_notes" in d.fields)), true);
+check("notes left as they were are not written", "meeting_notes" in planAllDaysEdit(long, shown26, { ...shown26, location: "Pool" }, later).fields, false);
+check("from a day on, the new series takes them too", planFollowingEdit(long, oct5, shown5, { ...saved, meeting_notes: "Bring the agenda" }, later).next.meeting_notes, "Bring the agenda");
+all = planAllDaysEdit(long, shown26, { ...shown26, recurrence: null }, later);
+check("no longer repeating: one event where the form put it, its changed days going", [all.fields.recurrence, all.fields.start_time, all.fields.recurrence_exceptions, all.dropDays], [null, o26.start_time, [], true]);
+
+check("skipped days before a day and from it", splitExceptionStarts([at("2026-10-12", "09:00"), at("2026-09-14", "09:00"), at("2026-10-05", "09:00")], at("2026-10-05", "09:00")),
+  { before: [at("2026-09-14", "09:00")], fromPivot: [at("2026-10-05", "09:00"), at("2026-10-12", "09:00")] });
 
 if (failures.length) {
   console.error(failures.join("\n"));

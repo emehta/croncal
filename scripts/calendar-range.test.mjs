@@ -15,6 +15,7 @@ import {
   isInWindow,
   isoWeek,
   resolveWeekWindow,
+  stepDate,
   weekBadge,
   windowMonth,
 } from "@/lib/calendar-range";
@@ -82,6 +83,28 @@ for (let i = 0; i < 730; i++) {
   const span = Math.round((w.end - w.start) / 86_400_000);
   const ok = isInWindow(chosen, w) && (span === 6 || span === 5 || span === 7) && weekBadge(w).includes(String(isoWeek(chosen)));
   if (!ok) failures.push(`window for ${key(chosen)}: ${key(w.start)} to ${key(w.end)}, ${weekBadge(w)}`);
+  else passed++;
+}
+
+/*
+ * The header's arrows. A month on from the 29th, 30th or 31st must land in
+ * the next month, at its last day if it is shorter: setMonth on 31 January
+ * went to 3 March, and February was never shown.
+ */
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+check("31 Jan, next month: 28 Feb", ymd(stepDate("month", new Date(2027, 0, 31), 1)), "2027-02-28");
+check("31 Jan in a leap year: 29 Feb", ymd(stepDate("month", new Date(2028, 0, 31), 1)), "2028-02-29");
+check("29 Jan, next month: still February", ymd(stepDate("month", new Date(2027, 0, 29), 1)), "2027-02-28");
+check("31 Mar, back a month: 28 Feb", ymd(stepDate("month", new Date(2027, 2, 31), -1)), "2027-02-28");
+check("31 Dec, next month: 31 Jan", ymd(stepDate("month", new Date(2026, 11, 31), 1)), "2027-01-31");
+check("31 Oct, next month: 30 Nov", ymd(stepDate("month", new Date(2026, 9, 31), 1)), "2026-11-30");
+check("next week: seven days on, across a month", ymd(stepDate("week", new Date(2026, 9, 28), 1)), "2026-11-04");
+check("back a day: across a year", ymd(stepDate("day", new Date(2027, 0, 1), -1)), "2026-12-31");
+// Every day of two years steps a month to the next month, never past it.
+for (let d = new Date(2026, 0, 1); d < new Date(2028, 0, 1); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+  const next = stepDate("month", d, 1);
+  const months = (next.getFullYear() - d.getFullYear()) * 12 + next.getMonth() - d.getMonth();
+  if (months !== 1) failures.push(`a month on from ${ymd(d)} is ${ymd(next)}`);
   else passed++;
 }
 

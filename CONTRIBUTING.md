@@ -4,7 +4,7 @@ This page is for changing the code. To install and use CronCal, see the [README]
 
 ## Run it
 
-You need Node 22.18 or newer (`.nvmrc` says 24) and a free Supabase project to test against. Make a second one for this, so your own events are never in the way. For Google, a test Google account and a client of its own (README, Google Calendar) with `http://localhost:3202/api/auth/google/callback` as a redirect URI.
+You need Node 22.18 or newer (`.nvmrc` says 24) and a free Supabase project to test against. Make a second one for this, so your own events are never in the way. For Google, a test Google account and a client of its own (README, Google Calendar) with `http://localhost:3202/api/auth/google/callback` as a redirect URI, or no Google account at all: `npm run google:stand-in` plays Google on port 3193, and `npm run develop` with `CRONCAL_GOOGLE_STAND_IN=http://127.0.0.1:3193` uses it: save the client ID and secret it prints in Settings.
 
 ```
 npm install
@@ -40,6 +40,7 @@ No test framework, on purpose: each suite is a plain Node script that exits non-
 - `scripts/alias-loader.mjs` lets a test `import` app code by the `@/` path.
 - Node strips TypeScript's types rather than compiling them. So a module a test loads must write type-only imports as `import type`, and must not use constructor parameter properties (`constructor(private readonly x: number)`), which Node refuses.
 - When you change something a suite covers, change the suite with it. When you fix a bug that left no trace, add the check that would have caught it.
+- Two more need a test project of their own and are not part of `npm test` or CI: `npm run e2e:google` (connect, sync and disconnect, against the stand-in) and `node --import ./scripts/alias-loader.mjs scripts/series-e2e.mjs` (changing a series, against Supabase). Set `CRONCAL_E2E_DATA_DIR` to a folder holding that project's `config.json`, and `CRONCAL_E2E_EMAIL` and `CRONCAL_E2E_PASSWORD` to its account.
 
 ## How it fits together
 
@@ -47,6 +48,7 @@ No test framework, on purpose: each suite is a plain Node script that exits non-
 - **Which screen.** `src/selfhost/SetupGate.tsx` asks `/api/selfhost/status` where setup stands, and `src/selfhost/steps.ts` decides the screen from that and the session. It's pure, and `scripts/setup.test.mjs` tests every combination.
 - **Server routes.** `src/app/api/selfhost/` (connect, check the tables, make the account, reset a password), `src/app/api/auth/google/` (connect, its callback, status, disconnect), `src/app/api/google/client/` (the owner's Google client) and `src/app/api/google-calendar/events/` (reading and writing Google's events). CronCal's own events are Supabase, from the browser, under row level security.
 - **The guard.** `src/proxy.ts` sits in front of every request. See [SECURITY.md](SECURITY.md).
+- **`/api/health`** answers with the app's name and version, so `scripts/start.mjs` can tell a CronCal already running on the port from another program, and an older copy from this one.
 - **The calendar.** `src/app/calendar/page.tsx` and `src/components/calendar/`. The rules that decide things, like a series' days (`recurrence.ts`), what a change to one day of a series does (`series-edit.ts`), where overlapping events sit (`calendar-layout.ts`) and how a dragged event lands (`event-drag.ts`), are pure modules in `src/lib/` with suites of their own.
 - **Google Calendar.** Through the owner's own Google Cloud client, saved in Settings (`src/selfhost/google-client.ts`); the tokens are in the server-only `google_auth` table (`src/lib/google-auth.ts`). Google's events are read and written on the server (`src/lib/google-calendar.ts`, `src/app/api/google-calendar/`) and drawn beside CronCal's. With **Sync to Google Calendar** on, a new event is made in Google, not CronCal: an event lives in one or the other, never both. A Google series is read and written in Google's own repeat rules (`src/lib/google-recurrence.ts`).
 
@@ -57,6 +59,7 @@ No test framework, on purpose: each suite is a plain Node script that exits non-
 - be safe to run again and again: `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, and the policy block that alters a policy in place rather than dropping it;
 - never drop, truncate or delete anything;
 - keep row level security on, with nothing granted to `anon`.
+- write a function (a change to a series, which touches several rows) as `CREATE OR REPLACE`, `SECURITY INVOKER` with `SET search_path = ''`, granted to `authenticated` alone, so the row rules still decide what it reaches. A function may delete events, as a change to a series does; the script around it never deletes.
 
 Bump `SCHEMA_VERSION` in `src/selfhost/constants.ts` and the version the SQL writes at its end, together. A project on an older version is then asked to run the setup again. `scripts/schema.test.mjs` checks all of this.
 
@@ -72,15 +75,13 @@ Bump `SCHEMA_VERSION` in `src/selfhost/constants.ts` and the version the SQL wri
 
 ## Where the code came from
 
-Most of CronCal was taken from a larger private app, the author's own, at one pinned commit, by `tools/extract.mjs`. `extract-manifest.json` lists each of those files. The setup, the guard, the start script and the Google client in Settings were written for CronCal, Todoer's first.
+Most of CronCal was taken from a larger private app at one pinned commit, by `tools/extract.mjs`. `extract-manifest.json` lists each of those files. The setup, the guard and the start script are shared with [Todoer](https://github.com/emehta/todoer); the Google client in Settings was written for CronCal.
 
-The extracted files keep their comments as they were, so some name things that aren't in this repo:
+Traps the extracted code assumes:
 
-- **"The owner"** is the original app's author, whose choices the comment records. A date says when the choice was made.
-- **"CLAUDE.md"** is that app's notes for contributors. The parts that apply here are the ones in this page, plus these traps:
-  - In `globals.css`, a `-webkit-backdrop-filter` beside `backdrop-filter` makes no frost at all: the CSS tool Tailwind runs keeps only the prefixed one, which current Chrome ignores. Write the unprefixed property alone there. A component's own `<style>` block isn't transformed, so the pair is harmless in one.
-  - A dropdown inside a scroller with a `mask-image` is measured but never painted. Render it in a portal.
-  - A stylesheet can arrive older than the page that uses it, so what a component needs ships in its own module.
+- In `globals.css`, a `-webkit-backdrop-filter` beside `backdrop-filter` makes no frost at all: the CSS tool Tailwind runs keeps only the prefixed one, which current Chrome ignores. Write the unprefixed property alone there. A component's own `<style>` block isn't transformed, so the pair is harmless in one.
+- A dropdown inside a scroller with a `mask-image` is measured but never painted. Render it in a portal.
+- A stylesheet can arrive older than the page that uses it, so what a component needs ships in its own module.
 - **`eslint-plugin-react-hooks` is held at 7.0.1** (`overrides` in `package.json`): 7.1 flags patterns all through the extracted code. Lift it in its own change, with the code fixed to match.
 
 ## Maintainer tools

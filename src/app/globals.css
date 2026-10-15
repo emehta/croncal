@@ -106,18 +106,19 @@
   --c-danger: #df6b62;
 
   --c-grid-line: rgba(255,255,255,0.06);
-  --dashboard-card-border: rgba(255,255,255,0.12);
+  --card-border: rgba(255,255,255,0.12);
   /* Standardized elevation: soft, contained (negative spread), not bottom-heavy */
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.22);
   --shadow-soft: 0 1px 2px rgba(0,0,0,0.18), 0 6px 16px -6px rgba(0,0,0,0.30);
   --shadow-pop: 0 6px 16px -4px rgba(0,0,0,0.34), 0 18px 44px -12px rgba(0,0,0,0.48);
-  --task-shadow: var(--shadow-xs);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(255,255,255,0.02);
   /* Saturday and Sunday read as a darker column, not just an untinted one. */
   --cal-weekend-bg: rgba(0,0,0,0.20);
-  --cal-selection-bg: rgba(66, 133, 244, 0.25);
-  --cal-selection-border: rgba(66, 133, 244, 0.6);
-  --cal-selection-text: rgba(66, 133, 244, 0.9);
+  /* The new-event selection, in the theme's own accent. */
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(120,120,120,0.30);
@@ -154,7 +155,7 @@
    * and near-black on Light, so the same hue comes out a pale tint here and
    * a deep shade there. --hue-ink is the hue's share, set per theme as the
    * most it can take with every palette in the app still at 4.5:1. Used
-   * through .ui-hue-ink in @layer components and hueInk in lib/styles.
+   * through .ui-hue-ink in @layer components.
    */
   --hue-ink: 44%;
   /*
@@ -206,20 +207,6 @@
 
   --scrollbar-thumb: rgba(255,255,255,0.08);
   --scrollbar-thumb-hover: rgba(255,255,255,0.15);
-
-  /* ── Public pages ─────────────────────────────────────────────────────────
-     A separate axis from the app's themes: those switch on `data-theme` for
-     the signed-in app, this switches on `data-public-theme` and only ever has
-     two states. Light is the default, so this is the light value and the dark
-     one lives in the `[data-public-theme="dark"]` block below. */
-  --public-bg: #ffffff;
-}
-
-/* ── Public pages, dark ─────────────────────────────────────────────────────
-   Midnight's page colour, the signed-in app's default theme, so signing in is
-   not a jolt. */
-[data-public-theme="dark"] {
-  --public-bg: #1c1c1c;
 }
 
 [data-theme="light"] {
@@ -253,16 +240,16 @@
   --c-danger: #b42318;
 
   --c-grid-line: rgba(0,0,0,0.08);
-  --dashboard-card-border: rgba(0,0,0,0.10);
+  --card-border: rgba(0,0,0,0.10);
   --shadow-xs: 0 1px 2px rgba(13,29,20,0.05);
   --shadow-soft: 0 1px 2px rgba(13,29,20,0.05), 0 6px 16px -6px rgba(13,29,20,0.12);
   --shadow-pop: 0 6px 16px -4px rgba(13,29,20,0.09), 0 18px 44px -12px rgba(13,29,20,0.18);
-  --task-shadow: var(--shadow-xs);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(0,0,0,0.02);
   --cal-weekend-bg: rgba(0,0,0,0.055);
-  --cal-selection-bg: rgba(59,130,246,0.18);
-  --cal-selection-border: rgba(37,99,235,0.42);
-  --cal-selection-text: #246fe0;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(0,0,0,0.16);
@@ -307,13 +294,13 @@
   --c-danger: #e4786e;
 
   --c-grid-line: rgba(255,220,180,0.06);
-  --dashboard-card-border: rgba(255,220,180,0.11);
-  --task-shadow: var(--shadow-xs);
+  --card-border: rgba(255,220,180,0.11);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(255,220,180,0.02);
   --cal-weekend-bg: rgba(0,0,0,0.18);
-  --cal-selection-bg: rgba(216, 166, 87, 0.22);
-  --cal-selection-border: rgba(216, 166, 87, 0.58);
-  --cal-selection-text: #f0cf94;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(120,120,120,0.30);
@@ -357,13 +344,13 @@
   --c-danger: #ef8076;
 
   --c-grid-line: rgba(144,200,130,0.06);
-  --dashboard-card-border: rgba(144,200,130,0.11);
-  --task-shadow: var(--shadow-xs);
+  --card-border: rgba(144,200,130,0.11);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(144,200,130,0.02);
   --cal-weekend-bg: rgba(0,0,0,0.18);
-  --cal-selection-bg: rgba(145, 197, 160, 0.22);
-  --cal-selection-border: rgba(145, 197, 160, 0.58);
-  --cal-selection-text: #b4e0c0;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(120,120,120,0.30);
@@ -413,13 +400,13 @@
   --c-danger-line: color-mix(in srgb, var(--c-danger) 40%, #050505);
   --c-danger: #ea5c64;
   --c-grid-line: rgba(255,255,255,0.07);
-  --dashboard-card-border: rgba(255,255,255,0.12);
-  --task-shadow: none;
+  --card-border: rgba(255,255,255,0.12);
+  --card-shadow: none;
   --cal-weekday-bg: rgba(255,255,255,0.02);
   --cal-weekend-bg: rgba(0,0,0,0.2);
-  --cal-selection-bg: rgba(255,255,255,0.22);
-  --cal-selection-border: rgba(255,255,255,0.58);
-  --cal-selection-text: #e3e3e3;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: none;
   --cal-toggle-off-bg: rgba(255,255,255,0.32);
@@ -471,13 +458,13 @@
   --c-danger-line: color-mix(in srgb, var(--c-danger) 34%, #1e1b23);
   --c-danger: #e46876;
   --c-grid-line: rgba(127,180,202,0.08);
-  --dashboard-card-border: rgba(127,180,202,0.13);
-  --task-shadow: var(--shadow-xs);
+  --card-border: rgba(127,180,202,0.13);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(220,215,186,0.02);
   --cal-weekend-bg: rgba(6,8,16,0.2);
-  --cal-selection-bg: rgba(132,184,171,0.22);
-  --cal-selection-border: rgba(132,184,171,0.58);
-  --cal-selection-text: #a9d1c7;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(220,215,186,0.4);
@@ -530,13 +517,13 @@
   --c-danger-line: color-mix(in srgb, var(--c-danger) 34%, #241e26);
   --c-danger: #eb6f92;
   --c-grid-line: rgba(196,167,231,0.08);
-  --dashboard-card-border: rgba(196,167,231,0.13);
-  --task-shadow: var(--shadow-xs);
+  --card-border: rgba(196,167,231,0.13);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(224,222,244,0.02);
   --cal-weekend-bg: rgba(12,10,22,0.2);
-  --cal-selection-bg: rgba(234,154,151,0.22);
-  --cal-selection-border: rgba(234,154,151,0.58);
-  --cal-selection-text: #f2bbb8;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(224,222,244,0.37);
@@ -588,13 +575,13 @@
   --c-danger-line: color-mix(in srgb, var(--c-danger) 34%, #1e1311);
   --c-danger: #fe6a56;
   --c-grid-line: rgba(241,231,210,0.06);
-  --dashboard-card-border: rgba(221,200,134,0.17);
-  --task-shadow: var(--shadow-xs);
+  --card-border: rgba(221,200,134,0.17);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(241,231,210,0.02);
   --cal-weekend-bg: rgba(10,1,2,0.2);
-  --cal-selection-bg: rgba(221,200,134,0.22);
-  --cal-selection-border: rgba(221,200,134,0.58);
-  --cal-selection-text: #ddc886;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(241,231,210,0.36);
@@ -649,16 +636,16 @@
   --c-danger-line: color-mix(in srgb, var(--c-danger) 34%, var(--c-surface));
   --c-danger: #a3262c;
   --c-grid-line: rgba(92,64,28,0.1);
-  --dashboard-card-border: rgba(92,64,28,0.17);
+  --card-border: rgba(92,64,28,0.17);
   --shadow-xs: 0 1px 2px rgba(84,56,20,0.07);
   --shadow-soft: 0 1px 1px rgba(84,56,20,0.05), 0 8px 18px -10px rgba(84,56,20,0.22);
   --shadow-pop: 0 6px 16px -4px rgba(84,56,20,0.11), 0 18px 44px -12px rgba(84,56,20,0.22);
-  --task-shadow: var(--shadow-xs);
+  --card-shadow: var(--shadow-xs);
   --cal-weekday-bg: rgba(92,64,28,0.02);
   --cal-weekend-bg: rgba(92,64,28,0.055);
-  --cal-selection-bg: rgba(44,93,143,0.16);
-  --cal-selection-border: rgba(44,93,143,0.42);
-  --cal-selection-text: #2c5d8f;
+  --cal-selection-bg: color-mix(in srgb, var(--c-accent) 22%, transparent);
+  --cal-selection-border: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  --cal-selection-text: color-mix(in srgb, var(--c-accent) 70%, var(--c-text-1));
   --cal-current-time: var(--c-danger);
   --cal-event-shadow: var(--shadow-xs);
   --cal-toggle-off-bg: rgba(92,64,28,0.16);
@@ -741,7 +728,7 @@
   textarea:-webkit-autofill:focus {
     -webkit-text-fill-color: var(--c-text-1);
     caret-color: var(--c-text-1);
-    box-shadow: 0 0 0 1000px var(--page-bg) inset;
+    box-shadow: 0 0 0 1000px var(--c-surface) inset;
     transition: background-color 99999s ease-in-out 0s;
   }
 
@@ -791,32 +778,17 @@
 
 @layer components {
 
-  /*
-   * A boxed field lights its own edge when anything inside it takes focus.
-   *
-   * The shared ring is a 2px outline offset 3px from the element, so on a
-   * field that already draws a border it would paint a second, detached
-   * rectangle outside the first. The row's own outline becomes the
-   * indicator, in the accent, and the control inside stops drawing its own.
-   */
-  .ui-field:focus-within {
-    box-shadow: 0 0 0 2px var(--c-accent);
-  }
-
-  .ui-field :is(input, textarea, select):focus,
-  .ui-field :is(input, textarea, select):focus-visible {
-    outline: none;
-  }
-
   .ui-hover-control {
     background: transparent;
     color: var(--c-text-2);
   }
 
+  /* !important, like the rules below: the buttons that carry it set their
+     colours inline, and an inline style otherwise wins over the hover. */
   .ui-hover-control:not(:disabled):is(:hover, :focus-visible) {
-    background: var(--c-hover);
-    color: var(--c-text-1);
-    border-color: var(--c-border);
+    background: var(--c-hover) !important;
+    color: var(--c-text-1) !important;
+    border-color: var(--c-border) !important;
   }
 
   /* Shared pointer and keyboard interaction states. These use !important so

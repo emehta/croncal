@@ -17,8 +17,8 @@ const nextConfig: NextConfig = {
   // AGENTS.md is written by hand; `next dev` would otherwise add its own block to it.
   agentRules: false,
   /* `npm start` builds on the user's computer, where checking the types again
-     proves nothing (CI checks them on every commit) and was half the build:
-     24 s of it, 13 s without. `npm run build` still checks. */
+     proves nothing (CI checks them on every commit) and takes about half the
+     build. `npm run build` still checks. */
   typescript: { ignoreBuildErrors: process.env.CRONCAL_SKIP_TYPECHECK === "1" },
   output: BUNDLE ? "standalone" : undefined,
   /* Next's image optimiser (sharp) is native, so the download would only run

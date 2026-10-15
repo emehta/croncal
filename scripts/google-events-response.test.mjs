@@ -2,7 +2,7 @@
  * Cases for the browser's check on the Google events response. No framework:
  * `npm test -- google-events-response`.
  *
- * What is being defended is the Home dashboard: an unexpected shape used to
+ * What is being defended is the calendar page: an unexpected shape used to
  * reach a `for...of`, throw inside a state update and replace the whole page
  * with the error boundary.
  */

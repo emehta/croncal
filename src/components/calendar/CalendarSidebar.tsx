@@ -3,15 +3,17 @@
 import { useMemo } from "react";
 import { CaretLeft, CaretRight, Eye, EyeSlash } from "@phosphor-icons/react";
 import GoogleBrandIcon from "@/components/GoogleBrandIcon";
+import Tooltip from "@/components/Tooltip";
 import { openSettings } from "@/lib/open-settings";
-import { countOccurrencesInRange, getAllOccurrencesInRange } from "@/lib/calendar-occurrence-utils";
-import { MONTHS_SHORT, isSameDay, startOfDay } from "@/lib/date-utils";
+import { DAY_NAMES, DAYS_SHORT, MONTHS_SHORT, monthKeyEnd, monthKeyStart, toDateStr } from "@/lib/date-utils";
+import { countOccurrencesOnDays, countSpans, occurrencesByDay } from "@/lib/event-days";
 import { CALENDAR_SIDEBAR_WIDTH } from "@/lib/styles";
-import { CalendarEvent } from "@/types/calendar-event";
+import type { CalendarEvent } from "@/types/calendar-event";
 import { isInWindow, type DayWindow } from "@/lib/calendar-range";
-import { getWeekRange, orderWeekdays, useWeekStart, type WeekStartPreference } from "@/lib/week-start";
+import { orderWeekdays, useWeekStart, type WeekStartPreference } from "@/lib/week-start";
 
-const DAYS_LABEL_SUNDAY_FIRST = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+/* One letter a day, as the date pickers' calendar (components/form/MonthCalendar) heads its columns. */
+const WEEKDAY_LETTERS = DAYS_SHORT.map((name, index) => ({ letter: name[0], name: DAY_NAMES[index] }));
 
 function getMonthGrid(
   year: number,
@@ -49,7 +51,12 @@ function getMonthGrid(
 
 interface CalendarSidebarProps {
   currentDate: Date;
+  /** The events on screen, for the mini calendar's dots. */
   events: CalendarEvent[];
+  /** Events that hold today, this week and this month, for the counts. */
+  countEvents: CalendarEvent[];
+  /** Today, as a date key, turning over at midnight (lib/use-today). */
+  today: string;
   onDateChange: (date: Date) => void;
   /** "connected" shows the switch; "reconnect" shows the prompt instead. */
   googleStatus: "checking" | "connected" | "disconnected" | "reconnect";
@@ -98,6 +105,8 @@ const RANGE_SHADE = "color-mix(in srgb, var(--c-accent) 14%, transparent)";
 export default function CalendarSidebar({
   currentDate,
   events,
+  countEvents,
+  today,
   onDateChange,
   googleStatus,
   showGoogleEvents,
@@ -109,24 +118,16 @@ export default function CalendarSidebar({
 }: CalendarSidebarProps) {
   const weekStart = useWeekStart();
   const checkingGoogle = googleStatus === "checking";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
-  // Event stats
+  // Today, this week and this month: the real today's, whatever month is on screen.
   const eventStats = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-    const week = getWeekRange(currentDate, weekStart);
-    const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
-
-    const todayCount = countOccurrencesInRange(events, todayStart, todayEnd);
-    const weekCount = countOccurrencesInRange(events, week.start, week.end);
-    const monthCount = countOccurrencesInRange(events, monthStart, monthEnd);
-    return { todayCount, weekCount, monthCount };
-  }, [events, currentDate, weekStart]);
+    const spans = countSpans(today, weekStart);
+    return {
+      todayCount: countOccurrencesOnDays(countEvents, spans.today.first, spans.today.last),
+      weekCount: countOccurrencesOnDays(countEvents, spans.week.first, spans.week.last),
+      monthCount: countOccurrencesOnDays(countEvents, spans.month.first, spans.month.last),
+    };
+  }, [countEvents, today, weekStart]);
 
   const [miniYear, miniMonth] = useMemo(() => {
     return [currentDate.getFullYear(), currentDate.getMonth()];
@@ -136,37 +137,21 @@ export default function CalendarSidebar({
     () => getMonthGrid(miniYear, miniMonth, weekStart),
     [miniYear, miniMonth, weekStart],
   );
-  const dayLabels = orderWeekdays(DAYS_LABEL_SUNDAY_FIRST, weekStart);
+  const dayLabels = orderWeekdays(WEEKDAY_LETTERS, weekStart);
 
-  // Determine which dates have events
+  // The days with something on, each on its own dates (lib/event-days).
   const eventDates = useMemo(() => {
-    const set = new Set<string>();
-    const rangeStart = new Date(miniYear, miniMonth, 1);
-    rangeStart.setHours(0, 0, 0, 0);
-    const rangeEnd = new Date(miniYear, miniMonth + 1, 0, 23, 59, 59, 999);
-
-    for (const occurrence of getAllOccurrencesInRange(events, rangeStart, rangeEnd)) {
-      const cursor = startOfDay(occurrence.start);
-      const lastIncludedInstant = new Date(Math.max(occurrence.start.getTime(), occurrence.end.getTime() - 1));
-      const finalDay = startOfDay(lastIncludedInstant);
-      while (cursor <= finalDay) {
-        if (cursor >= rangeStart && cursor <= rangeEnd) {
-          set.add(`${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`);
-        }
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    }
-
-    return set;
+    const month = `${miniYear}-${String(miniMonth + 1).padStart(2, "0")}`;
+    return new Set(occurrencesByDay(events, monthKeyStart(month), monthKeyEnd(month)).keys());
   }, [events, miniYear, miniMonth]);
 
   function hasEvent(date: Date): boolean {
-    return eventDates.has(`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`);
+    return eventDates.has(toDateStr(date));
   }
 
   // Check if a week row contains today
   function isCurrentWeekRow(week: (Date | null)[]): boolean {
-    return week.some((d) => d && isSameDay(d, today));
+    return week.some((d) => d !== null && toDateStr(d) === today);
   }
 
   /* Whether a cell is shaded: a day of the grid's window, or of today's row. */
@@ -203,49 +188,54 @@ export default function CalendarSidebar({
           background: "var(--c-surface)",
           border: "1px solid var(--c-border)",
           borderRadius: "var(--ui-radius-md)",
-          boxShadow: "var(--task-shadow)",
+          boxShadow: "var(--card-shadow)",
         }}
       >
         {/* Month navigation */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <button
-            type="button"
-            aria-label="Previous month"
-            className="ui-hover-text"
-            onClick={prevMonth}
-            style={{
-              width: stacked ? 32 : 22, height: stacked ? 32 : 22, borderRadius: "var(--ui-radius-round)", background: "transparent",
-              border: "none", display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer", color: "var(--c-text-4)",
-              transition: "color var(--motion-base) var(--ease-out)",
-            }}
-          >
-            <CaretLeft size={11} weight="bold" />
-          </button>
+          <Tooltip label="Previous month">
+            <button
+              type="button"
+              aria-label="Previous month"
+              className="ui-hover-text"
+              onClick={prevMonth}
+              style={{
+                width: stacked ? 32 : 22, height: stacked ? 32 : 22, borderRadius: "var(--ui-radius-round)", background: "transparent",
+                border: "none", display: "flex", alignItems: "center",
+                justifyContent: "center", cursor: "pointer", color: "var(--c-text-4)",
+                transition: "color var(--motion-base) var(--ease-out)",
+              }}
+            >
+              <CaretLeft size={11} weight="bold" aria-hidden="true" />
+            </button>
+          </Tooltip>
           <span style={{ fontSize: "var(--ui-type-label)", fontWeight: 600, color: "var(--c-text-1)" }}>
             {MONTHS_SHORT[miniMonth]} {miniYear}
           </span>
-          <button
-            type="button"
-            aria-label="Next month"
-            className="ui-hover-text"
-            onClick={nextMonth}
-            style={{
-              width: stacked ? 32 : 22, height: stacked ? 32 : 22, borderRadius: "var(--ui-radius-round)", background: "transparent",
-              border: "none", display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer", color: "var(--c-text-4)",
-              transition: "color var(--motion-base) var(--ease-out)",
-            }}
-          >
-            <CaretRight size={11} weight="bold" />
-          </button>
+          <Tooltip label="Next month">
+            <button
+              type="button"
+              aria-label="Next month"
+              className="ui-hover-text"
+              onClick={nextMonth}
+              style={{
+                width: stacked ? 32 : 22, height: stacked ? 32 : 22, borderRadius: "var(--ui-radius-round)", background: "transparent",
+                border: "none", display: "flex", alignItems: "center",
+                justifyContent: "center", cursor: "pointer", color: "var(--c-text-4)",
+                transition: "color var(--motion-base) var(--ease-out)",
+              }}
+            >
+              <CaretRight size={11} weight="bold" aria-hidden="true" />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Day labels + Date grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0 }}>
-          {dayLabels.map((lbl) => (
+          {dayLabels.map((day) => (
             <div
-              key={lbl}
+              key={day.name}
+              aria-label={day.name}
               style={{
                 textAlign: "center",
                 fontSize: "var(--ui-type-micro)",
@@ -256,7 +246,7 @@ export default function CalendarSidebar({
                 letterSpacing: "0.04em",
               }}
             >
-              {lbl}
+              {day.letter}
             </div>
           ))}
 
@@ -274,7 +264,7 @@ export default function CalendarSidebar({
                   />
                 );
               }
-              const isT = isSameDay(date, today);
+              const isT = toDateStr(date) === today;
               const hasEvt = hasEvent(date);
 
               return (
@@ -399,12 +389,12 @@ export default function CalendarSidebar({
               turn a setting on. A switch says "enabled", an eye says "visible",
               and the second is what the control actually does.
             */}
+            <Tooltip label={showGoogleEvents ? "Hide Google events" : "Show Google events"}>
             <button
               type="button"
               className="ui-hover-control"
               aria-pressed={showGoogleEvents}
-              aria-label={showGoogleEvents ? "Hide Google Calendar events" : "Show Google Calendar events"}
-              title={showGoogleEvents ? "Hide Google events" : "Show Google events"}
+              aria-label={showGoogleEvents ? "Hide Google events" : "Show Google events"}
               onClick={onToggleGoogleEvents}
               disabled={checkingGoogle}
               style={{
@@ -412,8 +402,9 @@ export default function CalendarSidebar({
                 alignItems: "center",
                 justifyContent: "center",
                 /* Sized to sit inside the row rather than set its height. */
+                /* A thumb's 32 on a phone. */
                 width: stacked ? 36 : 24,
-                height: stacked ? 28 : 18,
+                height: stacked ? 32 : 18,
                 padding: 0,
                 borderRadius: "var(--ui-radius-md)",
                 background: "transparent",
@@ -431,6 +422,7 @@ export default function CalendarSidebar({
                 ? <Eye size={14} weight="bold" aria-hidden="true" />
                 : <EyeSlash size={14} weight="bold" aria-hidden="true" />}
             </button>
+            </Tooltip>
           </div>
         )}
 
@@ -466,7 +458,7 @@ export default function CalendarSidebar({
             onClick={onReconnectGoogle}
             disabled={reconnectingGoogle}
             aria-busy={reconnectingGoogle || undefined}
-            className="ui-hover-control"
+            className="ui-hover-opacity-soft"
             style={{
               ...SIDEBAR_ROW,
               gridColumn: stacked ? "1 / -1" : undefined,
@@ -480,6 +472,7 @@ export default function CalendarSidebar({
               fontWeight: 600,
               cursor: "pointer",
               textAlign: "left",
+              transition: "opacity var(--motion-base) var(--ease-out)",
             }}
           >
             <GoogleBrandIcon size={13} />

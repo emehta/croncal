@@ -14,7 +14,7 @@
  * fetch can ask Google straight away rather than after the check.
  *
  * The same trick the app already plays with the theme before first paint, and
- * with `page-cache` between navigations.
+ * with the calendar's events (`page-cache`) between months.
  */
 const CONNECTION_MEMORY_PREFIX = "connected:";
 

@@ -2,6 +2,7 @@ import type { CalendarEvent } from "@/types/calendar-event";
 import { toDateStr } from "@/lib/date-utils";
 import { googleEndpoints } from "@/lib/google-endpoints";
 import { DEFAULT_ZONE } from "@/lib/google-recurrence";
+import { GOOGLE_COLORS } from "@/lib/google-colors";
 
 /**
  * Reading events out of Google Calendar.
@@ -10,19 +11,7 @@ import { DEFAULT_ZONE } from "@/lib/google-recurrence";
  * against a stubbed Google without standing up auth.
  */
 
-const GOOGLE_COLOR_MAP: Record<string, string> = {
-  "1": "#7986CB",  // Lavender
-  "2": "#33B679",  // Sage
-  "3": "#8E24AA",  // Grape
-  "4": "#E67C73",  // Flamingo
-  "5": "#F6BF26",  // Banana
-  "6": "#F4511E",  // Tangerine
-  "7": "#039BE5",  // Peacock
-  "8": "#616161",  // Graphite
-  "9": "#3F51B5",  // Blueberry
-  "10": "#0B8043", // Basil
-  "11": "#D50000", // Tomato
-};
+const GOOGLE_COLOR_MAP: Record<string, string> = Object.fromEntries(GOOGLE_COLORS.map((color) => [color.id, color.value]));
 const DEFAULT_GOOGLE_COLOR = "#4285F4";
 
 /**
@@ -33,8 +22,7 @@ const DEFAULT_GOOGLE_COLOR = "#4285F4";
 export function googleColorId(hex: string | null | undefined): string | null {
   if (!hex) return null;
   const wanted = hex.trim().toLowerCase();
-  const match = Object.entries(GOOGLE_COLOR_MAP).find(([, value]) => value.toLowerCase() === wanted);
-  return match ? match[0] : null;
+  return GOOGLE_COLORS.find((color) => color.value.toLowerCase() === wanted)?.id ?? null;
 }
 
 /**
@@ -75,6 +63,9 @@ const MAX_PAGES = 10;
 /* A page of up to 2,500 events; a request that hangs fails the read rather than holding the route. */
 const GOOGLE_PAGE_TIMEOUT_MS = 20_000;
 
+/** What every route answers when Google no longer accepts the connection, or there is none. */
+export const GOOGLE_RECONNECT_MESSAGE = "Reconnect Google Calendar in Settings.";
+
 export type GoogleCalendarFailure = "scope" | "upstream";
 
 export class GoogleCalendarError extends Error {
@@ -100,7 +91,6 @@ function isScopeError(errorText: string): boolean {
 
 type GoogleEventItem = Record<string, unknown>;
 
-/** One Google event as the rest of the app expects to receive it. */
 /** One Google event as the calendar shows it. `calendarZone` is the calendar's own, for an event that names none. */
 export function mapGoogleEvent(item: GoogleEventItem, calendarZone?: string): CalendarEvent {
   const startObj = (item.start ?? {}) as Record<string, string>;

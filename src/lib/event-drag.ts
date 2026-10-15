@@ -16,7 +16,7 @@
 export const COLUMN_SWITCH_MARGIN = 0.25;
 
 /** The grid's step, in minutes. */
-export const DRAG_SNAP_MINUTES = 15;
+const DRAG_SNAP_MINUTES = 15;
 
 const DAY_MINUTES = 24 * 60;
 

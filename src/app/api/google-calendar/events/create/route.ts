@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequest, readJsonObject, requireGoogleAccessToken } from "@/lib/api-route-utils";
+import { requireGoogleAccessToken } from "@/lib/api-route-utils";
+import { fail, readObject } from "@/selfhost/http";
 import { googleCreateBody, readGoogleEventCreate } from "@/app/api/google-calendar/events/google-payload";
 import { GoogleEditError, createGoogleEvent } from "@/app/api/google-calendar/events/google-edit";
 import { mapGoogleEvent } from "@/lib/google-calendar";
@@ -16,12 +17,12 @@ export async function POST(request: NextRequest) {
   const auth = await requireGoogleAccessToken(request);
   if (!auth.ok) return auth.response;
 
-  const body = await readJsonObject(request);
-  if (!body) return badRequest("Expected a JSON event.");
+  const body = await readObject(request);
+  if (!body) return fail("Expected a JSON event.");
   const event = readGoogleEventCreate(body);
-  if (typeof event === "string") return badRequest(event);
+  if (typeof event === "string") return fail(event);
   const googleEvent = googleCreateBody(event);
-  if (!googleEvent) return badRequest("The event needs a valid start, end and all_day.");
+  if (!googleEvent) return fail("The event needs a valid start and end.");
 
   try {
     const created = await createGoogleEvent({ accessToken: auth.accessToken }, googleEvent);

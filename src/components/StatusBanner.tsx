@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "@phosphor-icons/react";
+import Tooltip from "@/components/Tooltip";
 
 type Tone = "error" | "success" | "info";
 
@@ -60,24 +61,35 @@ export default function StatusBanner({
     >
       <div style={{ flex: 1, minWidth: 0 }}>{message}</div>
       {onDismiss && (
-        <button
-          type="button"
-          onClick={onDismiss}
-          style={{
-            background: "none",
-            border: "none",
-            color: toneStyle.accent,
-            cursor: "pointer",
-            padding: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-          aria-label="Dismiss status message"
-        >
-          <X size={12} />
-        </button>
+        <Tooltip label="Dismiss">
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="ui-hover-fill"
+            style={{
+              /* Drawn 28px, pulled into the banner's padding so a one-line banner
+                 stays one line tall; the span inside makes the press area 32. */
+              position: "relative",
+              width: 28,
+              height: 28,
+              margin: "-4px -8px -4px 0",
+              background: "none",
+              border: "none",
+              borderRadius: "var(--ui-radius-sm)",
+              color: toneStyle.accent,
+              cursor: "pointer",
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+            aria-label="Dismiss"
+          >
+            <span aria-hidden="true" style={{ position: "absolute", inset: -2 }} />
+            <X size={14} weight="bold" aria-hidden="true" />
+          </button>
+        </Tooltip>
       )}
     </div>
   );

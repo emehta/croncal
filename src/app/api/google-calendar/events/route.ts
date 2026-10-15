@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireGoogleAccessToken } from "@/lib/api-route-utils";
-import { GoogleCalendarError, fetchGoogleCalendarEvents } from "@/lib/google-calendar";
+import { GOOGLE_RECONNECT_MESSAGE, GoogleCalendarError, fetchGoogleCalendarEvents } from "@/lib/google-calendar";
 
 export const dynamic = "force-dynamic";
 
-const RECONNECT_MESSAGE = "Reconnect Google Calendar and allow calendar access.";
 const UPSTREAM_MESSAGE = "Google Calendar could not be loaded right now.";
 
 export async function GET(request: NextRequest) {
@@ -32,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof GoogleCalendarError) {
       console.error("Google Calendar fetch failed:", error.detail);
       return error.kind === "scope"
-        ? NextResponse.json({ error: RECONNECT_MESSAGE }, { status: 401 })
+        ? NextResponse.json({ error: GOOGLE_RECONNECT_MESSAGE }, { status: 401 })
         : NextResponse.json({ error: UPSTREAM_MESSAGE }, { status: 502 });
     }
 

@@ -20,7 +20,7 @@ export function enumerateDays(start: Date, end: Date): Date[] {
   return days;
 }
 
-/** The part of `start`–`end` that falls on `day`, or null if none of it does. */
+/** The part of `start` to `end` that falls on `day`, or null if none of it does. */
 export function getClippedOccurrenceForDay(
   start: Date,
   end: Date,

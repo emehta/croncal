@@ -15,6 +15,7 @@ import http from "node:http";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { ENV_NAMES } from "../src/selfhost/env-names.ts";
 
 const PORT = 3192;
 const APP = path.resolve(process.argv[2] ?? ".");
@@ -31,10 +32,7 @@ const server = spawn(process.execPath, [path.join(APP, "scripts", "start.mjs"), 
   env: {
     ...process.env,
     CRONCAL_DATA_DIR: dataDir,
-    ...Object.fromEntries(
-      ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_PUBLISHABLE_KEY",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"].map((name) => [name, ""]),
-    ),
+    ...Object.fromEntries(Object.values(ENV_NAMES).flat().map((name) => [name, ""])),
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -63,6 +61,8 @@ while (!output.includes("CronCal is running")) {
 const base = `http://127.0.0.1:${PORT}`;
 const health = await fetch(`${base}/api/health`).then((r) => r.json()).catch(() => null);
 check("it says it is CronCal", health?.app === "croncal");
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+check("and its version", health?.version === version, JSON.stringify(health));
 
 const status = await fetch(`${base}/api/selfhost/status`).then((r) => r.json()).catch(() => null);
 check("a fresh copy asks to be connected", status?.configured === false, JSON.stringify(status));

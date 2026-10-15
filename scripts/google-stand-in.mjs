@@ -254,7 +254,10 @@ export function createStandIn() {
       if (request.method === "POST") {
         const body = JSON.parse((await readBody(request)) || "{}");
         if (!body.start || !body.end) return googleError(response, 400, "required", "Missing start or end.");
-        const newId = randomUUID().replace(/-/g, "");
+        // An id of the caller's own, as Google takes one, and refuses again once it is used.
+        if (body.id !== undefined && !/^[a-v0-9]{5,1024}$/.test(String(body.id))) return googleError(response, 400, "invalid", "Invalid resource id value.");
+        if (body.id !== undefined && events.has(body.id)) return googleError(response, 409, "duplicate", "The requested identifier already exists.");
+        const newId = body.id ?? randomUUID().replace(/-/g, "");
         const now = new Date().toISOString();
         const event = { kind: "calendar#event", status: "confirmed", ...body, id: newId, iCalUID: `${newId}@google.com`, created: now, updated: now, etag: `"${randomUUID()}"`, htmlLink: `https://calendar.google.com/event?eid=${newId}`, organizer: { email: STAND_IN.email, self: true } };
         events.set(newId, event);
