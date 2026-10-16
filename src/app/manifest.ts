@@ -12,8 +12,9 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#1c1c1c",
     theme_color: "#1c1c1c",
     icons: [
-      { src: "/icon/small", sizes: "192x192", type: "image/png" },
-      { src: "/icon/large", sizes: "512x512", type: "image/png" },
+      // src/app/icon1.png and icon2.png, which Next also names in every page's head for the tab.
+      { src: "/icon1.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon2.png", sizes: "512x512", type: "image/png" },
     ],
   };
 }
